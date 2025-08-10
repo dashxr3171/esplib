@@ -79,14 +79,26 @@ local function removeEsp(player)
     cache[player] = nil
 end
 
+-- Modern raycast for wall check
 local function isPlayerBehindWall(player)
     local character = player.Character
     if not character then return false end
     local rootPart = character:FindFirstChild("HumanoidRootPart")
     if not rootPart then return false end
-    local ray = Ray.new(camera.CFrame.Position, (rootPart.Position - camera.CFrame.Position).Unit * (rootPart.Position - camera.CFrame.Position).Magnitude)
-    local hit = workspace:FindPartOnRayWithIgnoreList(ray, {localPlayer.Character, character})
-    return hit and hit:IsA("Part")
+
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {localPlayer.Character, character}
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.IgnoreWater = true
+
+    local origin = camera.CFrame.Position
+    local direction = rootPart.Position - origin
+    local result = workspace:Raycast(origin, direction, params)
+    if result then
+        return true
+    else
+        return false
+    end
 end
 
 local function createCornerBoxLines(color, thickness)
@@ -131,10 +143,7 @@ local function updateCornerBoxLines(lines, pos, size)
 end
 
 local function getPlayerTeam(player)
-    -- Try player.Team first
     if player.Team then return player.Team end
-
-    -- Then try player:GetAttribute for both "Team" and "team"
     local attr = player:GetAttribute("Team") or player:GetAttribute("team")
     return attr
 end
@@ -183,13 +192,11 @@ end
 
 local function updateEsp()
     for player, esp in pairs(cache) do
-        -- Update colors for elements that use theme colors
         esp.tracer.Color = ESP_SETTINGS.MainThemeColor
         esp.tracerBorder.Color = ESP_SETTINGS.BorderColor
         esp.box.Color = ESP_SETTINGS.MainThemeColor
         esp.boxBorder.Color = ESP_SETTINGS.BorderColor
 
-        -- Update corner box lines colors dynamically
         for _, line in ipairs(esp.cornerBoxLines) do
             line.Color = ESP_SETTINGS.MainThemeColor
         end
@@ -197,13 +204,13 @@ local function updateEsp()
             line.Color = ESP_SETTINGS.BorderColor
         end
 
-        -- Update skeleton lines colors
         for _, lineData in ipairs(esp.skeletonlines) do
             lineData[2].Color = ESP_SETTINGS.MainThemeColor
             lineData[1].Color = ESP_SETTINGS.BorderColor
         end
 
-        -- Note: Name and Distance colors stay fixed to white/black outline (set only in createEsp)
+        -- Name and Distance colors are fixed to white/black outline
+        -- so no update needed here.
 
         local character = player.Character
         local playerTeam = getPlayerTeam(player)
@@ -215,6 +222,7 @@ local function updateEsp()
             local humanoid = character:FindFirstChild("Humanoid")
             local isBehindWall = ESP_SETTINGS.WallCheck and isPlayerBehindWall(player)
             local shouldShow = ESP_SETTINGS.Enabled and not isBehindWall
+
             if rootPart and head and humanoid and shouldShow then
                 local hrp2D, onScreen = camera:WorldToViewportPoint(rootPart.Position)
                 if onScreen then
