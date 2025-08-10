@@ -39,6 +39,8 @@ local ESP_SETTINGS = {
     TracerPosition = "Bottom",
 }
 
+local HEALTH_BAR_WIDTH = 3
+
 local function create(class, properties)
     local drawing = Drawing.new(class)
     for property, value in pairs(properties) do
@@ -142,11 +144,11 @@ local function createEsp(player)
         nameBorder = create("Text", {Outline = true, Color = ESP_SETTINGS.BorderColor, Center = true, Size = 15}),
         name = create("Text", {Outline = true, Color = ESP_SETTINGS.MainThemeColor, Center = true, Size = 13}),
 
-        healthBorder = create("Square", {Filled = true, Color = ESP_SETTINGS.BorderColor}),
+        healthBorder = create("Square", {Filled = true, Color = Color3.new(0,0,0)}),  -- Black border for health
         health = create("Square", {Filled = true, Color = ESP_SETTINGS.MainThemeColor}),
 
-        distanceBorder = create("Text", {Outline = true, Color = ESP_SETTINGS.BorderColor, Center = true, Size = 14}),
-        distance = create("Text", {Outline = true, Color = ESP_SETTINGS.MainThemeColor, Center = true, Size = 12}),
+        distanceBorder = create("Text", {Outline = true, Color = Color3.new(0,0,0), Center = true, Size = 14}),
+        distance = create("Text", {Outline = true, Color = Color = Color3.new(1,1,1), Center = true, Size = 12}),
 
         skeletonlines = {},
     }
@@ -157,25 +159,38 @@ local function createEsp(player)
         table.insert(esp.skeletonlines, {borderLine, mainLine, bonePair[1], bonePair[2]})
     end
 
+    -- Initialize health and distance text once
+    local character = player.Character
+    if character then
+        local humanoid = character:FindFirstChild("Humanoid")
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        if humanoid and rootPart then
+            local healthPerc = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
+            esp.health.Size = Vector2.new(HEALTH_BAR_WIDTH, 0) -- initial height zero (will be updated on visible)
+            esp.health.Color = Color3.new(1,0,0):Lerp(Color3.new(0,1,0), healthPerc)
+
+            local dist = math.floor((camera.CFrame.Position - rootPart.Position).Magnitude + 0.5)
+            esp.distance.Text = string.format("[%d]", dist)
+        end
+    end
+
     cache[player] = esp
 end
 
 local function updateEsp()
     for player, esp in pairs(cache) do
+        -- Update colors every frame so changes apply to all players' ESP
         esp.tracer.Color = ESP_SETTINGS.MainThemeColor
         esp.tracerBorder.Color = ESP_SETTINGS.BorderColor
         esp.box.Color = ESP_SETTINGS.MainThemeColor
         esp.boxBorder.Color = ESP_SETTINGS.BorderColor
         esp.name.Color = ESP_SETTINGS.MainThemeColor
         esp.nameBorder.Color = ESP_SETTINGS.BorderColor
-        esp.health.Color = ESP_SETTINGS.MainThemeColor
-        esp.healthBorder.Color = ESP_SETTINGS.BorderColor
-        esp.distance.Color = ESP_SETTINGS.MainThemeColor
-        esp.distanceBorder.Color = ESP_SETTINGS.BorderColor
         for _, lineData in ipairs(esp.skeletonlines) do
             lineData[2].Color = ESP_SETTINGS.MainThemeColor  -- mainLine
             lineData[1].Color = ESP_SETTINGS.BorderColor     -- borderLine
         end
+
         local character, team = player.Character, player.Team
         if character and (not ESP_SETTINGS.Teamcheck or (team and team ~= localPlayer.Team)) then
             local rootPart = character:FindFirstChild("HumanoidRootPart")
@@ -231,38 +246,33 @@ local function updateEsp()
                         esp.name.Visible = false
                     end
 
+                    -- HEALTH BAR: only update position & size to fit box, no color or height update here
                     if ESP_SETTINGS.ShowHealth then
                         local healthPerc = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
                         local barHeight = boxSize.Y * healthPerc
-                        local barWidth = 5
-                        local barX = boxPosition.X - barWidth - 2
+                        local barX = boxPosition.X - HEALTH_BAR_WIDTH - 2
                         local barY = boxPosition.Y + boxSize.Y - barHeight
+
                         esp.healthBorder.Position = Vector2.new(barX - 1, boxPosition.Y)
-                        esp.healthBorder.Size = Vector2.new(barWidth + 2, boxSize.Y)
-                        esp.healthBorder.Filled = true
-                        esp.healthBorder.Color = ESP_SETTINGS.BorderColor
+                        esp.healthBorder.Size = Vector2.new(HEALTH_BAR_WIDTH + 2, boxSize.Y)
                         esp.healthBorder.Visible = true
-                        local greenColor = Color3.new(0,1,0)
-                        local redColor = Color3.new(1,0,0)
+                        esp.healthBorder.Color = Color3.new(0, 0, 0) -- black border
+
                         esp.health.Position = Vector2.new(barX, barY)
-                        esp.health.Size = Vector2.new(barWidth, barHeight)
-                        esp.health.Filled = true
-                        esp.health.Color = redColor:Lerp(greenColor, healthPerc)
+                        esp.health.Size = Vector2.new(HEALTH_BAR_WIDTH, barHeight)
                         esp.health.Visible = true
+                        -- Color NOT updated here, only size & position
                     else
                         esp.healthBorder.Visible = false
                         esp.health.Visible = false
                     end
 
+                    -- DISTANCE: only show/hide, no value update here
                     if ESP_SETTINGS.ShowDistance then
-                        local dist = math.floor((camera.CFrame.Position - rootPart.Position).Magnitude + 0.5)
-                        local distText = string.format("[%d]", dist)
                         local distPos = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y + boxSize.Y + 2)
-                        esp.distanceBorder.Visible = false
-                        esp.distance.Text = distText
                         esp.distance.Position = distPos
-                        esp.distance.Color = ESP_SETTINGS.MainThemeColor
                         esp.distance.Visible = true
+                        esp.distanceBorder.Visible = false
                     else
                         esp.distance.Visible = false
                         esp.distanceBorder.Visible = false
@@ -310,6 +320,7 @@ local function updateEsp()
                         esp.tracer.Visible = false
                     end
                 else
+                    -- Not on screen, hide all
                     for _, v in pairs(esp) do
                         if type(v) == "table" then
                             for _, obj in ipairs(v) do
@@ -323,6 +334,7 @@ local function updateEsp()
                     end
                 end
             else
+                -- No rootPart or humanoid or failed checks, hide all
                 for _, v in pairs(esp) do
                     if type(v) == "table" then
                         for _, obj in ipairs(v) do
@@ -336,6 +348,7 @@ local function updateEsp()
                 end
             end
         else
+            -- No character or failed team check, hide all
             for _, v in pairs(esp) do
                 if type(v) == "table" then
                     for _, obj in ipairs(v) do
