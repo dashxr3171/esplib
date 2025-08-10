@@ -39,8 +39,8 @@ local ESP_SETTINGS = {
     TracerPosition = "Bottom",
     SkeletonVisible = false,
     SkeletonColor = false,
-    ESPVisible = false,
-    ESPColor = Color3.fromRGB(255, 0, 0)
+    ESPVisible = false,           -- When true, hide ESP if behind wall
+    ESPColor = Color3.fromRGB(255, 0, 0) -- Color for behind-wall ESP if ESPVisible is false
 }
 
 local HEALTH_BAR_WIDTH = 3
@@ -216,13 +216,29 @@ local function updateEsp()
         local playerTeam = getPlayerTeam(player)
         local localTeam = getPlayerTeam(localPlayer)
 
+        local isBehindWall = ESP_SETTINGS.WallCheck and isPlayerBehindWall(player)
+
+        local shouldShow
+        if ESP_SETTINGS.Enabled then
+            if ESP_SETTINGS.WallCheck then
+                if ESP_SETTINGS.ESPVisible then
+                    shouldShow = not isBehindWall
+                elseif ESP_SETTINGS.ESPColor then
+                    shouldShow = true
+                else
+                    shouldShow = true
+                end
+            else
+                shouldShow = true
+            end
+        else
+            shouldShow = false
+        end
+
         if character and (not ESP_SETTINGS.Teamcheck or (playerTeam and localTeam and playerTeam ~= localTeam)) then
             local rootPart = character:FindFirstChild("HumanoidRootPart")
             local head = character:FindFirstChild("Head")
             local humanoid = character:FindFirstChild("Humanoid")
-            local isBehindWall = ESP_SETTINGS.WallCheck and isPlayerBehindWall(player)
-
-            local shouldShow = ESP_SETTINGS.Enabled and (ESP_SETTINGS.ESPVisible or not isBehindWall)
 
             if rootPart and head and humanoid and shouldShow then
                 local hrp2D, onScreen = camera:WorldToViewportPoint(rootPart.Position)
@@ -231,7 +247,12 @@ local function updateEsp()
                     local boxSize = Vector2.new(math.floor(charHeight * 0.6), math.floor(charHeight))
                     local boxPosition = Vector2.new(math.floor(hrp2D.X - boxSize.X / 2), math.floor(hrp2D.Y - boxSize.Y / 2))
 
-                    local currentColor = (isBehindWall and ESP_SETTINGS.ESPVisible) and ESP_SETTINGS.ESPColor or ESP_SETTINGS.MainThemeColor
+                    local currentColor
+                    if isBehindWall and ESP_SETTINGS.WallCheck and ESP_SETTINGS.ESPColor then
+                        currentColor = ESP_SETTINGS.ESPColor
+                    else
+                        currentColor = ESP_SETTINGS.MainThemeColor
+                    end
                     local borderColor = ESP_SETTINGS.BorderColor
 
                     esp.tracer.Color = currentColor
