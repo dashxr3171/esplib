@@ -139,27 +139,37 @@ local function removeEsp(player)
     displayedHealthPerc[player] = nil
 end
 
+-- FIXED: More comprehensive hideAllEsp function
 local function hideAllEsp(esp)
-    for _, v in pairs(esp) do
-        if type(v) == "table" then
-            if v[1] and v[1].Visible ~= nil then
-                for _, lineData in ipairs(v) do
-                    if lineData.Visible ~= nil then
-                        lineData.Visible = false
-                    end
-                end
-            else
-                for _, obj in ipairs(v) do
-                    if obj and obj.Visible ~= nil then
-                        obj.Visible = false
-                    end
-                end
+    -- Hide basic elements
+    if esp.tracerBorder then esp.tracerBorder.Visible = false end
+    if esp.tracer then esp.tracer.Visible = false end
+    if esp.boxBorder then esp.boxBorder.Visible = false end
+    if esp.box then esp.box.Visible = false end
+    if esp.name then esp.name.Visible = false end
+    if esp.healthBorder then esp.healthBorder.Visible = false end
+    if esp.health then esp.health.Visible = false end
+    if esp.distance then esp.distance.Visible = false end
+    if esp.filledCornerBox then esp.filledCornerBox.Visible = false end
+    
+    -- Hide corner box lines
+    if esp.cornerBoxBorderLines then
+        for _, line in ipairs(esp.cornerBoxBorderLines) do
+            if line and line.Visible ~= nil then
+                line.Visible = false
             end
-        elseif v and v.Visible ~= nil then
-            v.Visible = false
         end
     end
     
+    if esp.cornerBoxLines then
+        for _, line in ipairs(esp.cornerBoxLines) do
+            if line and line.Visible ~= nil then
+                line.Visible = false
+            end
+        end
+    end
+    
+    -- Hide skeleton lines
     if esp.skeletonlines then
         for _, lineData in ipairs(esp.skeletonlines) do
             if lineData[1] and lineData[1].Visible ~= nil then
@@ -169,10 +179,6 @@ local function hideAllEsp(esp)
                 lineData[2].Visible = false
             end
         end
-    end
-    
-    if esp.filledCornerBox then
-        esp.filledCornerBox.Visible = false
     end
 end
 
@@ -259,6 +265,7 @@ local function createEsp(player)
             Visible = false
         }),
         skeletonlines = {},
+        filledCornerBox = nil, -- Initialize as nil, create when needed
     }
     
     for _, bonePair in ipairs(bones) do
@@ -280,6 +287,7 @@ local function updateEsp()
     
     for player, esp in pairs(cache) do
         if not player or not player.Parent then
+            hideAllEsp(esp)
             continue
         end
         
@@ -405,19 +413,24 @@ local function updateEsp()
 
                 for _, line in ipairs(esp.cornerBoxBorderLines) do line.Visible = false end
                 for _, line in ipairs(esp.cornerBoxLines) do line.Visible = false end
+                if esp.filledCornerBox then esp.filledCornerBox.Visible = false end
                 
             elseif ESP_SETTINGS.BoxType == "Corner" then
                 esp.boxBorder.Visible = false
                 esp.box.Visible = false
 
                 if ESP_SETTINGS.ShowBoxFilled then
-                    local fillInset = 4
+                    -- FIXED: Made fill box bigger by reducing inset
+                    local fillInset = 2 -- Reduced from 4 to 2 for bigger fill
                     local fillPos = Vector2.new(boxPosition.X + fillInset, boxPosition.Y + fillInset)
                     local fillSize = Vector2.new(boxSize.X - fillInset * 2, boxSize.Y - fillInset * 2)
 
-                    esp.filledCornerBox = esp.filledCornerBox or create("Square", {Filled = true, Transparency = 0.5, Color = ESP_SETTINGS.BoxFillColor, Visible = false})
+                    if not esp.filledCornerBox then
+                        esp.filledCornerBox = create("Square", {Filled = true, Transparency = 0.5, Color = ESP_SETTINGS.BoxFillColor, Visible = false})
+                    end
                     esp.filledCornerBox.Position = fillPos
                     esp.filledCornerBox.Size = fillSize
+                    esp.filledCornerBox.Color = ESP_SETTINGS.BoxFillColor
                     esp.filledCornerBox.Visible = true
                 else
                     if esp.filledCornerBox then
