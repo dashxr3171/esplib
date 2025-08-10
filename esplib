@@ -22,9 +22,9 @@ local bones = {
 }
 
 local ESP_SETTINGS = {
-    Enabled = false,
+    Enabled = true,
     Teamcheck = false,
-    WallCheck = true,
+    WallCheck = false,
     WallCheckMode = "ColorChange", -- "ColorChange" or "Hide"
     ShowBox = false,
     BoxType = "Box",
