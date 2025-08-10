@@ -192,7 +192,7 @@ local function updateEsp()
         local nameColor = ESP_SETTINGS.NameColor
         local distanceColor = ESP_SETTINGS.DistanceColor
 
-      if ESP_SETTINGS.Teamcheck then
+       if ESP_SETTINGS.Teamcheck then
     local localTeamVal = localPlayer.Team or localPlayer:GetAttribute("Team")
     local playerTeamVal = player.Team or player:GetAttribute("Team")
 
