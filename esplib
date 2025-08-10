@@ -162,6 +162,20 @@ end
 
 local function updateEsp()
     for player, esp in pairs(cache) do
+        esp.tracer.Color = ESP_SETTINGS.MainThemeColor
+        esp.tracerBorder.Color = ESP_SETTINGS.BorderColor
+        esp.box.Color = ESP_SETTINGS.MainThemeColor
+        esp.boxBorder.Color = ESP_SETTINGS.BorderColor
+        esp.name.Color = ESP_SETTINGS.MainThemeColor
+        esp.nameBorder.Color = ESP_SETTINGS.BorderColor
+        esp.health.Color = ESP_SETTINGS.MainThemeColor
+        esp.healthBorder.Color = ESP_SETTINGS.BorderColor
+        esp.distance.Color = ESP_SETTINGS.MainThemeColor
+        esp.distanceBorder.Color = ESP_SETTINGS.BorderColor
+        for _, lineData in ipairs(esp.skeletonlines) do
+            lineData[2].Color = ESP_SETTINGS.MainThemeColor  -- mainLine
+            lineData[1].Color = ESP_SETTINGS.BorderColor     -- borderLine
+        end
         local character, team = player.Character, player.Team
         if character and (not ESP_SETTINGS.Teamcheck or (team and team ~= localPlayer.Team)) then
             local rootPart = character:FindFirstChild("HumanoidRootPart")
