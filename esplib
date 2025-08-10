@@ -32,6 +32,8 @@ local ESP_SETTINGS = {
     BoxType = "Box",
     BoxColor = Color3.fromRGB(255, 255, 255),
     BoxBorderColor = Color3.fromRGB(0, 0, 0),
+    ShowBoxFilled = false,
+    BoxFillColor = Color3.fromRGB(255, 255, 255),
     ShowName = false,
     NameColor = Color3.fromRGB(255, 255, 255),
     ShowHealth = false,
@@ -105,11 +107,7 @@ local function isPlayerBehindWall(player)
     local origin = camera.CFrame.Position
     local direction = rootPart.Position - origin
     local result = workspace:Raycast(origin, direction, params)
-    if result then
-        return true
-    else
-        return false
-    end
+    return result ~= nil
 end
 
 local function createCornerBoxLines(color, thickness)
@@ -254,10 +252,21 @@ local function updateEsp()
                         if ESP_SETTINGS.BoxType == "Box" then
                             esp.boxBorder.Size = boxSize
                             esp.boxBorder.Position = boxPosition
+                            esp.boxBorder.Visible = true
+
                             esp.box.Size = boxSize
                             esp.box.Position = boxPosition
-                            esp.boxBorder.Visible = true
+                            if ESP_SETTINGS.ShowBoxFilled then
+                                esp.box.Filled = true
+                                esp.box.Transparency = 0.5
+                                esp.box.Color = ESP_SETTINGS.BoxFillColor
+                            else
+                                esp.box.Filled = false
+                                esp.box.Transparency = 1
+                                esp.box.Color = boxMainColor
+                            end
                             esp.box.Visible = true
+
                             for _, line in ipairs(esp.cornerBoxBorderLines) do line.Visible = false end
                             for _, line in ipairs(esp.cornerBoxLines) do line.Visible = false end
                         elseif ESP_SETTINGS.BoxType == "Corner" then
@@ -420,25 +429,29 @@ end
 local function onPlayerAdded(player)
     player.CharacterAdded:Connect(function()
         wait(1)
-        if not cache[player] then
+        if cache[player] == nil then
             createEsp(player)
         end
     end)
-    createEsp(player)
-end
-
-local function onPlayerRemoving(player)
-    removeEsp(player)
 end
 
 for _, player in pairs(Players:GetPlayers()) do
     if player ~= localPlayer then
+        createEsp(player)
         onPlayerAdded(player)
     end
 end
 
-Players.PlayerAdded:Connect(onPlayerAdded)
-Players.PlayerRemoving:Connect(onPlayerRemoving)
+Players.PlayerAdded:Connect(function(player)
+    if player ~= localPlayer then
+        createEsp(player)
+        onPlayerAdded(player)
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    removeEsp(player)
+end)
 
 RunService.RenderStepped:Connect(function()
     updateEsp()
