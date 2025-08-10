@@ -25,7 +25,7 @@ local ESP_SETTINGS = {
     Enabled = false,
     Teamcheck = false,
     WallCheck = true,
-    WallCheckMode = "ColorChange", -- "ColorChange" or "Hide"
+    WallCheckMode = "ColorChange",
     ShowBox = false,
     BoxType = "Box",
     BoxColor = Color3.fromRGB(255, 255, 255),
@@ -197,7 +197,7 @@ local function updateEsp()
                 if ESP_SETTINGS.WallCheckMode == "ColorChange" then
                     shouldShow = true
                     currentColor = ESP_SETTINGS.InvisColor
-                    borderColor = ESP_SETTINGS.BoxBorderColor
+                    borderColor = ESP_SETTINGS.InvisColor
                 elseif ESP_SETTINGS.WallCheckMode == "Hide" then
                     shouldShow = false
                 else
@@ -226,21 +226,44 @@ local function updateEsp()
                     local boxSize = Vector2.new(math.floor(charHeight * 0.6), math.floor(charHeight))
                     local boxPosition = Vector2.new(math.floor(hrp2D.X - boxSize.X / 2), math.floor(hrp2D.Y - boxSize.Y / 2))
 
-                    esp.tracer.Color = ESP_SETTINGS.TracerColor
-                    esp.tracerBorder.Color = ESP_SETTINGS.TracerBorderColor
-                    esp.box.Color = currentColor or ESP_SETTINGS.BoxColor
-                    esp.boxBorder.Color = borderColor or ESP_SETTINGS.BoxBorderColor
+                    local espColor = currentColor or ESP_SETTINGS.BoxColor
+                    local espBorderColor = borderColor or ESP_SETTINGS.BoxBorderColor
+                    local skeletonColor = ESP_SETTINGS.SkeletonColor
+                    local skeletonBorderColor = ESP_SETTINGS.SkeletonBorderColor
+                    local tracerColor = ESP_SETTINGS.TracerColor
+                    local tracerBorderColor = ESP_SETTINGS.TracerBorderColor
+                    local nameColor = ESP_SETTINGS.NameColor
+                    local distanceColor = ESP_SETTINGS.DistanceColor
+
+                    if ESP_SETTINGS.WallCheck and isBehindWall and ESP_SETTINGS.WallCheckMode == "ColorChange" then
+                        skeletonColor = ESP_SETTINGS.InvisColor
+                        skeletonBorderColor = ESP_SETTINGS.InvisColor
+                        tracerColor = ESP_SETTINGS.InvisColor
+                        tracerBorderColor = ESP_SETTINGS.InvisColor
+                        nameColor = ESP_SETTINGS.InvisColor
+                        distanceColor = ESP_SETTINGS.InvisColor
+                    end
+
+                    esp.box.Color = espColor
+                    esp.boxBorder.Color = espBorderColor
 
                     for _, line in ipairs(esp.cornerBoxLines) do
-                        line.Color = ESP_SETTINGS.BoxColor
+                        line.Color = espColor
                     end
                     for _, line in ipairs(esp.cornerBoxBorderLines) do
-                        line.Color = ESP_SETTINGS.BoxBorderColor
+                        line.Color = espBorderColor
                     end
+
                     for _, lineData in ipairs(esp.skeletonlines) do
-                        lineData[2].Color = ESP_SETTINGS.SkeletonColor
-                        lineData[1].Color = ESP_SETTINGS.SkeletonBorderColor
+                        lineData[2].Color = skeletonColor
+                        lineData[1].Color = skeletonBorderColor
                     end
+
+                    esp.tracer.Color = tracerColor
+                    esp.tracerBorder.Color = tracerBorderColor
+
+                    esp.name.Color = nameColor
+                    esp.distance.Color = distanceColor
 
                     if ESP_SETTINGS.ShowBox then
                         if ESP_SETTINGS.BoxType == "Box" then
@@ -274,7 +297,6 @@ local function updateEsp()
                         local pos = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y - 16)
                         esp.name.Text = player.Name
                         esp.name.Position = pos
-                        esp.name.Color = ESP_SETTINGS.NameColor
                         esp.name.Visible = true
                     else
                         esp.name.Visible = false
@@ -310,7 +332,6 @@ local function updateEsp()
                         esp.distance.Text = string.format("[%d]", dist)
                         local distPos = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y + boxSize.Y + 2)
                         esp.distance.Position = distPos
-                        esp.distance.Color = ESP_SETTINGS.DistanceColor
                         esp.distance.Visible = true
                     else
                         esp.distance.Visible = false
@@ -329,8 +350,6 @@ local function updateEsp()
                                     mainLine.To = Vector2.new(p2.X, p2.Y)
                                     borderLine.Visible = true
                                     mainLine.Visible = true
-                                    borderLine.Color = ESP_SETTINGS.SkeletonBorderColor
-                                    mainLine.Color = ESP_SETTINGS.SkeletonColor
                                 else
                                     borderLine.Visible = false
                                     mainLine.Visible = false
@@ -355,8 +374,6 @@ local function updateEsp()
                         esp.tracer.To = Vector2.new(hrp2D.X, hrp2D.Y)
                         esp.tracerBorder.Visible = true
                         esp.tracer.Visible = true
-                        esp.tracer.Color = ESP_SETTINGS.TracerColor
-                        esp.tracerBorder.Color = ESP_SETTINGS.TracerBorderColor
                     else
                         esp.tracerBorder.Visible = false
                         esp.tracer.Visible = false
@@ -434,4 +451,5 @@ end)
 RunService.RenderStepped:Connect(function()
     updateEsp()
 end)
+
 return(ESP_SETTINGS)
