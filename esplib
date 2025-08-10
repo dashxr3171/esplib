@@ -130,6 +130,15 @@ local function updateCornerBoxLines(lines, pos, size)
     end
 end
 
+local function getPlayerTeam(player)
+    -- Try player.Team first
+    if player.Team then return player.Team end
+
+    -- Then try player:GetAttribute for both "Team" and "team"
+    local attr = player:GetAttribute("Team") or player:GetAttribute("team")
+    return attr
+end
+
 local function createEsp(player)
     local esp = {
         tracerBorder = create("Line", {Thickness = ESP_SETTINGS.TracerThickness + 2, Color = ESP_SETTINGS.BorderColor}),
@@ -141,13 +150,11 @@ local function createEsp(player)
         cornerBoxBorderLines = createCornerBoxLines(ESP_SETTINGS.BorderColor, 3),
         cornerBoxLines = createCornerBoxLines(ESP_SETTINGS.MainThemeColor, 1),
 
-        -- Removed nameBorder
         name = create("Text", {Outline = true, Color = ESP_SETTINGS.MainThemeColor, Center = true, Size = 13}),
 
         healthBorder = create("Square", {Filled = true, Color = Color3.new(0,0,0)}),
         health = create("Square", {Filled = true, Color = ESP_SETTINGS.MainThemeColor}),
 
-        -- Removed distanceBorder
         distance = create("Text", {Outline = true, Color = Color3.new(1,1,1), Center = true, Size = 15}),
 
         skeletonlines = {},
@@ -174,8 +181,11 @@ local function updateEsp()
             lineData[1].Color = ESP_SETTINGS.BorderColor
         end
 
-        local character, team = player.Character, player.Team
-        if character and (not ESP_SETTINGS.Teamcheck or (team and team ~= localPlayer.Team)) then
+        local character = player.Character
+        local playerTeam = getPlayerTeam(player)
+        local localTeam = getPlayerTeam(localPlayer)
+
+        if character and (not ESP_SETTINGS.Teamcheck or (playerTeam and localTeam and playerTeam ~= localTeam)) then
             local rootPart = character:FindFirstChild("HumanoidRootPart")
             local head = character:FindFirstChild("Head")
             local humanoid = character:FindFirstChild("Humanoid")
@@ -188,6 +198,7 @@ local function updateEsp()
                     local boxSize = Vector2.new(math.floor(charHeight * 0.6), math.floor(charHeight))
                     local boxPosition = Vector2.new(math.floor(hrp2D.X - boxSize.X / 2), math.floor(hrp2D.Y - boxSize.Y / 2))
 
+                    -- Box Drawing
                     if ESP_SETTINGS.ShowBox then
                         if ESP_SETTINGS.BoxType == "Box" then
                             esp.boxBorder.Size = boxSize
@@ -216,6 +227,7 @@ local function updateEsp()
                         for _, line in ipairs(esp.cornerBoxLines) do line.Visible = false end
                     end
 
+                    -- Name
                     if ESP_SETTINGS.ShowName then
                         local pos = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y - 16)
                         esp.name.Text = player.Name
@@ -225,6 +237,7 @@ local function updateEsp()
                         esp.name.Visible = false
                     end
 
+                    -- Health bar
                     if ESP_SETTINGS.ShowHealth then
                         local healthPerc = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
                         local barHeight = boxSize.Y * healthPerc
@@ -245,6 +258,7 @@ local function updateEsp()
                         esp.health.Visible = false
                     end
 
+                    -- Distance
                     if ESP_SETTINGS.ShowDistance then
                         local dist = math.floor((camera.CFrame.Position - rootPart.Position).Magnitude + 0.5)
                         esp.distance.Text = string.format("[%d]", dist)
@@ -255,6 +269,7 @@ local function updateEsp()
                         esp.distance.Visible = false
                     end
 
+                    -- Skeleton lines
                     if ESP_SETTINGS.ShowSkeletons then
                         for _, lineData in ipairs(esp.skeletonlines) do
                             local borderLine, mainLine, parentBone, childBone = unpack(lineData)
@@ -284,6 +299,7 @@ local function updateEsp()
                         end
                     end
 
+                    -- Tracer
                     if ESP_SETTINGS.ShowTracer then
                         local tracerY = (ESP_SETTINGS.TracerPosition == "Top" and 0) or (ESP_SETTINGS.TracerPosition == "Middle" and camera.ViewportSize.Y / 2) or camera.ViewportSize.Y
                         esp.tracerBorder.From = Vector2.new(camera.ViewportSize.X / 2, tracerY)
@@ -297,6 +313,7 @@ local function updateEsp()
                         esp.tracer.Visible = false
                     end
                 else
+                    -- Not on screen, hide all
                     for _, v in pairs(esp) do
                         if type(v) == "table" then
                             for _, obj in ipairs(v) do
@@ -310,6 +327,7 @@ local function updateEsp()
                     end
                 end
             else
+                -- Missing parts or disabled, hide all
                 for _, v in pairs(esp) do
                     if type(v) == "table" then
                         for _, obj in ipairs(v) do
@@ -323,6 +341,7 @@ local function updateEsp()
                 end
             end
         else
+            -- Team check failed or no character, hide all
             for _, v in pairs(esp) do
                 if type(v) == "table" then
                     for _, obj in ipairs(v) do
