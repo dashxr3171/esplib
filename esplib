@@ -226,20 +226,32 @@ local function updateEsp()
                     local boxSize = Vector2.new(math.floor(charHeight * 0.6), math.floor(charHeight))
                     local boxPosition = Vector2.new(math.floor(hrp2D.X - boxSize.X / 2), math.floor(hrp2D.Y - boxSize.Y / 2))
 
+                    local effectiveBoxColor = currentColor or ESP_SETTINGS.BoxColor
+                    local effectiveBoxBorderColor = borderColor or ESP_SETTINGS.BoxBorderColor
+
                     esp.tracer.Color = ESP_SETTINGS.TracerColor
                     esp.tracerBorder.Color = ESP_SETTINGS.TracerBorderColor
-                    esp.box.Color = currentColor or ESP_SETTINGS.BoxColor
-                    esp.boxBorder.Color = borderColor or ESP_SETTINGS.BoxBorderColor
+
+                    esp.box.Color = effectiveBoxColor
+                    esp.boxBorder.Color = effectiveBoxBorderColor
 
                     for _, line in ipairs(esp.cornerBoxLines) do
-                        line.Color = ESP_SETTINGS.BoxColor
+                        line.Color = effectiveBoxColor
                     end
                     for _, line in ipairs(esp.cornerBoxBorderLines) do
-                        line.Color = ESP_SETTINGS.BoxBorderColor
+                        line.Color = effectiveBoxBorderColor
                     end
+
+                    local skeletonColor = ESP_SETTINGS.SkeletonColor
+                    local skeletonBorderColor = ESP_SETTINGS.SkeletonBorderColor
+                    if isBehindWall and ESP_SETTINGS.WallCheckMode == "ColorChange" then
+                        skeletonColor = ESP_SETTINGS.InvisColor
+                        skeletonBorderColor = ESP_SETTINGS.InvisColor
+                    end
+
                     for _, lineData in ipairs(esp.skeletonlines) do
-                        lineData[2].Color = ESP_SETTINGS.SkeletonColor
-                        lineData[1].Color = ESP_SETTINGS.SkeletonBorderColor
+                        lineData[2].Color = skeletonColor
+                        lineData[1].Color = skeletonBorderColor
                     end
 
                     if ESP_SETTINGS.ShowBox then
@@ -317,6 +329,7 @@ local function updateEsp()
                     end
 
                     if ESP_SETTINGS.ShowSkeletons then
+                        -- Skeleton lines are already handled with color above
                         for _, lineData in ipairs(esp.skeletonlines) do
                             local borderLine, mainLine, parentBone, childBone = unpack(lineData)
                             if character:FindFirstChild(parentBone) and character:FindFirstChild(childBone) then
@@ -329,8 +342,6 @@ local function updateEsp()
                                     mainLine.To = Vector2.new(p2.X, p2.Y)
                                     borderLine.Visible = true
                                     mainLine.Visible = true
-                                    borderLine.Color = ESP_SETTINGS.SkeletonBorderColor
-                                    mainLine.Color = ESP_SETTINGS.SkeletonColor
                                 else
                                     borderLine.Visible = false
                                     mainLine.Visible = false
@@ -415,23 +426,27 @@ local function updateEsp()
     end
 end
 
-for _, player in ipairs(Players:GetPlayers()) do
+local function onPlayerAdded(player)
+    player.CharacterAdded:Connect(function()
+        removeEsp(player)
+        if ESP_SETTINGS.Enabled then
+            createEsp(player)
+        end
+    end)
+end
+
+for _, player in pairs(Players:GetPlayers()) do
     if player ~= localPlayer then
-        createEsp(player)
+        onPlayerAdded(player)
     end
 end
 
 Players.PlayerAdded:Connect(function(player)
     if player ~= localPlayer then
-        createEsp(player)
+        onPlayerAdded(player)
     end
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-    removeEsp(player)
 end)
 
 RunService.RenderStepped:Connect(function()
     updateEsp()
 end)
-return(ESP_SETTINGS)
