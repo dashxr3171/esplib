@@ -28,8 +28,8 @@ local ESP_SETTINGS = {
     CharSize = Vector2.new(4, 6),
     Teamcheck = false,
     WallCheck = false,
-    Enabled = false,         -- Enabled by default for testing
-    ShowBox = false,         -- Show box by default for testing
+    Enabled = false,
+    ShowBox = false,
     BoxType = "Box",
     ShowName = false,
     ShowHealth = false,
@@ -141,14 +141,14 @@ local function createEsp(player)
         cornerBoxBorderLines = createCornerBoxLines(ESP_SETTINGS.BorderColor, 3),
         cornerBoxLines = createCornerBoxLines(ESP_SETTINGS.MainThemeColor, 1),
 
-        nameBorder = create("Text", {Outline = true, Color = ESP_SETTINGS.BorderColor, Center = true, Size = 15}),
+        -- Removed nameBorder
         name = create("Text", {Outline = true, Color = ESP_SETTINGS.MainThemeColor, Center = true, Size = 13}),
 
-        healthBorder = create("Square", {Filled = true, Color = Color3.new(0,0,0)}),  -- Black border for health
+        healthBorder = create("Square", {Filled = true, Color = Color3.new(0,0,0)}),
         health = create("Square", {Filled = true, Color = ESP_SETTINGS.MainThemeColor}),
 
-        distanceBorder = create("Text", {Outline = true, Color = Color3.new(0,0,0), Center = true, Size = 14}),
-        distance = create("Text", {Outline = true, Color = Color3.new(1,1,1), Center = true, Size = 12}),
+        -- Removed distanceBorder
+        distance = create("Text", {Outline = true, Color = Color3.new(1,1,1), Center = true, Size = 15}),
 
         skeletonlines = {},
     }
@@ -164,16 +164,14 @@ end
 
 local function updateEsp()
     for player, esp in pairs(cache) do
-        -- Update colors every frame to apply theme changes dynamically
         esp.tracer.Color = ESP_SETTINGS.MainThemeColor
         esp.tracerBorder.Color = ESP_SETTINGS.BorderColor
         esp.box.Color = ESP_SETTINGS.MainThemeColor
         esp.boxBorder.Color = ESP_SETTINGS.BorderColor
         esp.name.Color = ESP_SETTINGS.MainThemeColor
-        esp.nameBorder.Color = ESP_SETTINGS.BorderColor
         for _, lineData in ipairs(esp.skeletonlines) do
-            lineData[2].Color = ESP_SETTINGS.MainThemeColor  -- mainLine
-            lineData[1].Color = ESP_SETTINGS.BorderColor     -- borderLine
+            lineData[2].Color = ESP_SETTINGS.MainThemeColor
+            lineData[1].Color = ESP_SETTINGS.BorderColor
         end
 
         local character, team = player.Character, player.Team
@@ -220,14 +218,10 @@ local function updateEsp()
 
                     if ESP_SETTINGS.ShowName then
                         local pos = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y - 16)
-                        esp.nameBorder.Text = player.Name
                         esp.name.Text = player.Name
-                        esp.nameBorder.Position = pos
                         esp.name.Position = pos
-                        esp.nameBorder.Visible = true
                         esp.name.Visible = true
                     else
-                        esp.nameBorder.Visible = false
                         esp.name.Visible = false
                     end
 
@@ -240,7 +234,7 @@ local function updateEsp()
                         esp.healthBorder.Position = Vector2.new(barX - 1, boxPosition.Y)
                         esp.healthBorder.Size = Vector2.new(HEALTH_BAR_WIDTH + 2, boxSize.Y)
                         esp.healthBorder.Visible = true
-                        esp.healthBorder.Color = Color3.new(0, 0, 0) -- black border
+                        esp.healthBorder.Color = Color3.new(0, 0, 0)
 
                         esp.health.Position = Vector2.new(barX, barY)
                         esp.health.Size = Vector2.new(HEALTH_BAR_WIDTH, barHeight)
@@ -257,10 +251,8 @@ local function updateEsp()
                         local distPos = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y + boxSize.Y + 2)
                         esp.distance.Position = distPos
                         esp.distance.Visible = true
-                        esp.distanceBorder.Visible = false
                     else
                         esp.distance.Visible = false
-                        esp.distanceBorder.Visible = false
                     end
 
                     if ESP_SETTINGS.ShowSkeletons then
@@ -305,7 +297,6 @@ local function updateEsp()
                         esp.tracer.Visible = false
                     end
                 else
-                    -- Not on screen, hide all
                     for _, v in pairs(esp) do
                         if type(v) == "table" then
                             for _, obj in ipairs(v) do
@@ -319,7 +310,6 @@ local function updateEsp()
                     end
                 end
             else
-                -- No rootPart or humanoid or failed checks, hide all
                 for _, v in pairs(esp) do
                     if type(v) == "table" then
                         for _, obj in ipairs(v) do
@@ -333,7 +323,6 @@ local function updateEsp()
                 end
             end
         else
-            -- No character or failed team check, hide all
             for _, v in pairs(esp) do
                 if type(v) == "table" then
                     for _, obj in ipairs(v) do
