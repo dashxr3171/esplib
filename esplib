@@ -177,10 +177,10 @@ local function createEsp(player)
 end
 
 local function updateEsp()
+    local localTeam = localPlayer.Team
     for player, esp in pairs(cache) do
         local character = player.Character
         local playerTeam = player.Team
-        local localTeam = localPlayer.Team
         local isBehindWall = ESP_SETTINGS.WallCheck and isPlayerBehindWall(player)
         local shouldShow = false
         local boxMainColor = ESP_SETTINGS.BoxColor
@@ -193,7 +193,7 @@ local function updateEsp()
         local distanceColor = ESP_SETTINGS.DistanceColor
 
         if ESP_SETTINGS.Enabled then
-            if ESP_SETTINGS.Teamcheck and playerTeam and localTeam and playerTeam == localTeam then
+            if ESP_SETTINGS.Teamcheck and playerTeam and localTeam and playerTeam.Name == localTeam.Name then
                 if ESP_SETTINGS.TeamCheckESPMode == "Hide" then
                     shouldShow = false
                 elseif ESP_SETTINGS.TeamCheckESPMode == "ColorChange" then
@@ -227,8 +227,8 @@ local function updateEsp()
                     local boxSize = Vector2.new(math.floor(charHeight * 0.6), math.floor(charHeight))
                     local boxPosition = Vector2.new(math.floor(hrp2D.X - boxSize.X / 2), math.floor(hrp2D.Y - boxSize.Y / 2))
 
-                    esp.box.Color = boxMainColor
                     esp.boxBorder.Color = boxBorderColor
+                    esp.box.Color = boxMainColor
 
                     for _, line in ipairs(esp.cornerBoxLines) do
                         line.Color = boxMainColor
@@ -254,16 +254,14 @@ local function updateEsp()
                             esp.boxBorder.Position = boxPosition
                             esp.boxBorder.Visible = true
 
+                            local fillInset = 2
+                            esp.box.Size = Vector2.new(boxSize.X - fillInset * 2, boxSize.Y - fillInset * 2)
+                            esp.box.Position = Vector2.new(boxPosition.X + fillInset, boxPosition.Y + fillInset)
                             if ESP_SETTINGS.ShowBoxFilled then
-                                local fillInset = 2
-                                esp.box.Size = Vector2.new(boxSize.X - fillInset * 2, boxSize.Y - fillInset * 2)
-                                esp.box.Position = Vector2.new(boxPosition.X + fillInset, boxPosition.Y + fillInset)
                                 esp.box.Filled = true
                                 esp.box.Transparency = 0.5
                                 esp.box.Color = ESP_SETTINGS.BoxFillColor
                             else
-                                esp.box.Size = boxSize
-                                esp.box.Position = boxPosition
                                 esp.box.Filled = false
                                 esp.box.Transparency = 1
                                 esp.box.Color = boxMainColor
@@ -272,36 +270,45 @@ local function updateEsp()
 
                             for _, line in ipairs(esp.cornerBoxBorderLines) do line.Visible = false end
                             for _, line in ipairs(esp.cornerBoxLines) do line.Visible = false end
-
                         elseif ESP_SETTINGS.BoxType == "Corner" then
                             esp.boxBorder.Visible = false
+                            esp.box.Visible = false
 
+                            -- Draw filled box for corner ESP as a smaller filled square behind corner lines
                             if ESP_SETTINGS.ShowBoxFilled then
-                                local fillInset = 2
-                                esp.box.Size = Vector2.new(boxSize.X - fillInset * 2, boxSize.Y - fillInset * 2)
-                                esp.box.Position = Vector2.new(boxPosition.X + fillInset, boxPosition.Y + fillInset)
-                                esp.box.Filled = true
-                                esp.box.Transparency = 0.5
-                                esp.box.Color = ESP_SETTINGS.BoxFillColor
-                                esp.box.Visible = true
+                                local fillInset = 4
+                                local fillPos = Vector2.new(boxPosition.X + fillInset, boxPosition.Y + fillInset)
+                                local fillSize = Vector2.new(boxSize.X - fillInset * 2, boxSize.Y - fillInset * 2)
+
+                                esp.filledCornerBox = esp.filledCornerBox or create("Square", {Filled = true, Transparency = 0.5, Color = ESP_SETTINGS.BoxFillColor})
+                                esp.filledCornerBox.Position = fillPos
+                                esp.filledCornerBox.Size = fillSize
+                                esp.filledCornerBox.Visible = true
                             else
-                                esp.box.Visible = false
+                                if esp.filledCornerBox then
+                                    esp.filledCornerBox.Visible = false
+                                end
                             end
 
                             updateCornerBoxLines(esp.cornerBoxBorderLines, boxPosition, boxSize)
                             updateCornerBoxLines(esp.cornerBoxLines, boxPosition, boxSize)
-
                         else
                             esp.boxBorder.Visible = false
                             esp.box.Visible = false
                             for _, line in ipairs(esp.cornerBoxBorderLines) do line.Visible = false end
                             for _, line in ipairs(esp.cornerBoxLines) do line.Visible = false end
+                            if esp.filledCornerBox then
+                                esp.filledCornerBox.Visible = false
+                            end
                         end
                     else
                         esp.boxBorder.Visible = false
                         esp.box.Visible = false
                         for _, line in ipairs(esp.cornerBoxBorderLines) do line.Visible = false end
                         for _, line in ipairs(esp.cornerBoxLines) do line.Visible = false end
+                        if esp.filledCornerBox then
+                            esp.filledCornerBox.Visible = false
+                        end
                     end
 
                     if ESP_SETTINGS.ShowName then
@@ -405,6 +412,9 @@ local function updateEsp()
                         lineData[1].Visible = false
                         lineData[2].Visible = false
                     end
+                    if esp.filledCornerBox then
+                        esp.filledCornerBox.Visible = false
+                    end
                 end
             else
                 for _, v in pairs(esp) do
@@ -421,6 +431,9 @@ local function updateEsp()
                 for _, lineData in ipairs(esp.skeletonlines) do
                     lineData[1].Visible = false
                     lineData[2].Visible = false
+                end
+                if esp.filledCornerBox then
+                    esp.filledCornerBox.Visible = false
                 end
             end
         else
@@ -439,30 +452,42 @@ local function updateEsp()
                 lineData[1].Visible = false
                 lineData[2].Visible = false
             end
+            if esp.filledCornerBox then
+                esp.filledCornerBox.Visible = false
+            end
         end
     end
 end
+
+local function onPlayerAdded(player)
+    player.CharacterAdded:Connect(function()
+        wait(1)
+        if cache[player] == nil then
+            createEsp(player)
+        end
+    end)
+end
+
+for _, player in pairs(Players:GetPlayers()) do
+    if player ~= localPlayer then
+        createEsp(player)
+        onPlayerAdded(player)
+    end
+end
+
+Players.PlayerAdded:Connect(function(player)
+    if player ~= localPlayer then
+        createEsp(player)
+        onPlayerAdded(player)
+    end
+end)
 
 Players.PlayerRemoving:Connect(function(player)
     removeEsp(player)
 end)
 
-Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(function()
-        removeEsp(player)
-        if ESP_SETTINGS.Enabled then
-            createEsp(player)
-        end
-    end)
-end)
-
-for _, player in ipairs(Players:GetPlayers()) do
-    if player ~= localPlayer then
-        createEsp(player)
-    end
-end
-
 RunService.RenderStepped:Connect(function()
     updateEsp()
 end)
-return(ESP_SETTINGS)
+
+return ESP_SETTINGS
