@@ -37,6 +37,8 @@ local ESP_SETTINGS = {
     ShowSkeletons = false,
     ShowTracer = false,
     TracerPosition = "Bottom",
+    SkeletonVisible = false,
+    SkeletonColor = false
 }
 
 local HEALTH_BAR_WIDTH = 3
@@ -312,8 +314,14 @@ local function updateEsp()
                                     borderLine.Visible = true
                                     mainLine.Visible = true
                                 else
-                                    borderLine.Visible = false
-                                    mainLine.Visible = false
+                                    if SkeletonVisible then
+                                        borderLine.Visible = false
+                                        mainLine.Visible = false
+                                    else
+                                        if SkeletonColor then
+                                            mainLine.Color = Color3.fromRGB(255,255,255)
+                                        end
+                                    end
                                 end
                             else
                                 borderLine.Visible = false
