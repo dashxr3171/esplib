@@ -41,7 +41,7 @@ local ESP_SETTINGS = {
     ShowSkeletons = false,
     ShowTracer = false,
     TracerColor = Color3.new(1, 1, 1),
-    TracerThickness = 2,
+    TracerThickness = 1,
     SkeletonsColor = Color3.new(1, 1, 1),
     TracerPosition = "Bottom",
 }
@@ -155,7 +155,7 @@ local function updateEsp()
                 if onScreen then
                     local hrp2D = camera:WorldToViewportPoint(rootPart.Position)
                     local charSize = (camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0)).Y - camera:WorldToViewportPoint(rootPart.Position + Vector3.new(0, 2.6, 0)).Y) / 2
-                    local boxSize = Vector2.new(math.floor(charSize * 1.5), math.floor(charSize * 1.9))
+                    local boxSize = Vector2.new(math.floor(charSize * 1), math.floor(charSize * 1))
                     local boxPosition = Vector2.new(math.floor(hrp2D.X - charSize * 1.8 / 2), math.floor(hrp2D.Y - charSize * 1.6 / 2))
 
                     -- name
