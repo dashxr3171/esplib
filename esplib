@@ -25,6 +25,7 @@ local ESP_SETTINGS = {
     Enabled = false,
     Teamcheck = false,
     WallCheck = true,
+    WallCheckMode = "ColorChange", -- "ColorChange" or "Hide"
     ShowBox = false,
     BoxType = "Box",
     BoxColor = Color3.fromRGB(255, 255, 255),
@@ -45,9 +46,7 @@ local ESP_SETTINGS = {
     TracerColor = Color3.fromRGB(255, 255, 255),
     TracerBorderColor = Color3.fromRGB(0, 0, 0),
     TracerThickness = 1,
-    ESPColorEnabled = false,
     InvisColor = Color3.fromRGB(255, 0, 0),
-    ESPVisible = false,
 }
 
 local HEALTH_BAR_WIDTH = 3
@@ -195,11 +194,11 @@ local function updateEsp()
 
         if ESP_SETTINGS.Enabled then
             if ESP_SETTINGS.WallCheck and isBehindWall then
-                if ESP_SETTINGS.ESPColorEnabled then
+                if ESP_SETTINGS.WallCheckMode == "ColorChange" then
                     shouldShow = true
                     currentColor = ESP_SETTINGS.InvisColor
                     borderColor = ESP_SETTINGS.BoxBorderColor
-                elseif ESP_SETTINGS.ESPVisible then
+                elseif ESP_SETTINGS.WallCheckMode == "Hide" then
                     shouldShow = false
                 else
                     shouldShow = true
@@ -409,6 +408,7 @@ local function updateEsp()
                 end
             end
             for _, lineData in ipairs(esp.skeletonlines) do
+                lineData[1].Visible
                 lineData[1].Visible = false
                 lineData[2].Visible = false
             end
@@ -432,3 +432,4 @@ Players.PlayerRemoving:Connect(removeEsp)
 RunService.RenderStepped:Connect(updateEsp)
 
 return ESP_SETTINGS
+
