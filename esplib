@@ -192,28 +192,24 @@ local function updateEsp()
         local nameColor = ESP_SETTINGS.NameColor
         local distanceColor = ESP_SETTINGS.DistanceColor
 
-        if ESP_SETTINGS.Enabled then
-            if ESP_SETTINGS.Teamcheck and playerTeam and localTeam and playerTeam == localTeam then
-                if ESP_SETTINGS.TeamCheckESPMode == "Hide" then
-                    shouldShow = false
-                elseif ESP_SETTINGS.TeamCheckESPMode == "ColorChange" then
-                    shouldShow = true
-                    boxMainColor = ESP_SETTINGS.TeamCheckESPColor
-                end
-            else
-                shouldShow = true
-            end
+      if ESP_SETTINGS.Teamcheck then
+    local localTeamVal = localPlayer.Team or localPlayer:GetAttribute("Team")
+    local playerTeamVal = player.Team or player:GetAttribute("Team")
 
-            if shouldShow and ESP_SETTINGS.WallCheck and isBehindWall then
-                if ESP_SETTINGS.WallCheckMode == "ColorChange" then
-                    boxMainColor = ESP_SETTINGS.InvisColor
-                elseif ESP_SETTINGS.WallCheckMode == "Hide" then
-                    shouldShow = false
-                end
-            end
-        else
+    if localTeamVal and playerTeamVal and localTeamVal == playerTeamVal then
+        if ESP_SETTINGS.TeamCheckESPMode == "Hide" then
             shouldShow = false
+        elseif ESP_SETTINGS.TeamCheckESPMode == "ColorChange" then
+            shouldShow = true
+            boxMainColor = ESP_SETTINGS.TeamCheckESPColor
         end
+    else
+        shouldShow = true
+    end
+else
+    shouldShow = true
+end
+
 
         if character and shouldShow then
             local rootPart = character:FindFirstChild("HumanoidRootPart")
