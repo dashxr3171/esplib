@@ -53,6 +53,7 @@ local ESP_SETTINGS = {
     TracerThickness = 1,
     InvisColor = Color3.fromRGB(255, 0, 0),
     MaxDistance = 1000, -- Max distance to show ESP
+    CornerLength = 20, -- FIXED: Static corner line length that doesn't change with distance
 }
 
 local HEALTH_BAR_WIDTH = 3
@@ -204,16 +205,21 @@ local function createCornerBoxLines(color, thickness, zIndex)
     return lines
 end
 
+-- FIXED: Updated function with consistent corner line lengths
 local function updateCornerBoxLines(lines, pos, size)
     if not lines or #lines < 8 then return end
     
-    -- Static corner line lengths that don't scale with distance
-    local lineLengthW = math.max(size.X / 4, 15) -- Increased minimum width
-    local lineLengthH = math.max(size.Y / 4, 15) -- Increased minimum height
+    -- FIXED: Use static corner length from settings instead of scaling with box size
+    local lineLengthW = ESP_SETTINGS.CornerLength
+    local lineLengthH = ESP_SETTINGS.CornerLength
     
-    -- Cap the maximum length so corners don't get too long on close players
-    lineLengthW = math.min(lineLengthW, size.X / 2)
-    lineLengthH = math.min(lineLengthH, size.Y / 2)
+    -- FIXED: Ensure corner lines never exceed half the box size to prevent connecting
+    lineLengthW = math.min(lineLengthW, size.X / 2 - 2) -- -2 for gap
+    lineLengthH = math.min(lineLengthH, size.Y / 2 - 2) -- -2 for gap
+    
+    -- Ensure minimum length for visibility
+    lineLengthW = math.max(lineLengthW, 8)
+    lineLengthH = math.max(lineLengthH, 8)
     
     -- Top-left corner
     lines[1].From = pos
