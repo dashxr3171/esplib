@@ -22,26 +22,39 @@ local bones = {
 }
 
 local ESP_SETTINGS = {
-    MainThemeColor = Color3.fromRGB(255, 255, 255),
-    BorderColor = Color3.fromRGB(0, 0, 0),
-    TracerThickness = 1,
-    CharSize = Vector2.new(4, 6),
+    Enabled = false,
     Teamcheck = false,
     WallCheck = true,
-    Enabled = false,
+
     ShowBox = false,
     BoxType = "Box",
+    BoxColor = Color3.fromRGB(255, 255, 255),
+    BoxBorderColor = Color3.fromRGB(0, 0, 0),
+
     ShowName = false,
+    NameColor = Color3.fromRGB(255, 255, 255),
+
     ShowHealth = false,
+    HealthColor = Color3.fromRGB(0, 255, 0),
+    HealthBorderColor = Color3.fromRGB(0, 0, 0),
+
     ShowDistance = false,
+    DistanceColor = Color3.fromRGB(255, 255, 255),
+
     ShowSkeletons = false,
+    SkeletonColor = Color3.fromRGB(255, 255, 255),
+    SkeletonBorderColor = Color3.fromRGB(0, 0, 0),
+
     ShowTracer = false,
     TracerPosition = "Bottom",
-    SkeletonVisible = false,
-    SkeletonColor = false,
-    ESPColorEnabled = false,          -- NEW: whether ESP recolor behind wall is enabled
-    InvisColor = Color3.fromRGB(255, 0, 0), -- NEW: color used if ESPColorEnabled and behind wall
-    ESPVisible = false                 -- if true, hide ESP when behind wall (only if ESPColorEnabled is false)
+    TracerColor = Color3.fromRGB(255, 255, 255),
+    TracerBorderColor = Color3.fromRGB(0, 0, 0),
+
+    TracerThickness = 1,
+
+    ESPColorEnabled = false,
+    InvisColor = Color3.fromRGB(255, 0, 0),
+    ESPVisible = false,
 }
 
 local HEALTH_BAR_WIDTH = 3
@@ -143,24 +156,24 @@ end
 
 local function createEsp(player)
     local esp = {
-        tracerBorder = create("Line", {Thickness = ESP_SETTINGS.TracerThickness + 2, Color = ESP_SETTINGS.BorderColor}),
-        tracer = create("Line", {Thickness = ESP_SETTINGS.TracerThickness, Color = ESP_SETTINGS.MainThemeColor}),
-        boxBorder = create("Square", {Thickness = 3, Color = ESP_SETTINGS.BorderColor, Filled = false}),
-        box = create("Square", {Thickness = 1, Color = ESP_SETTINGS.MainThemeColor, Filled = false}),
-        cornerBoxBorderLines = createCornerBoxLines(ESP_SETTINGS.BorderColor, 3),
-        cornerBoxLines = createCornerBoxLines(ESP_SETTINGS.MainThemeColor, 1),
+        tracerBorder = create("Line", {Thickness = ESP_SETTINGS.TracerThickness + 2, Color = ESP_SETTINGS.TracerBorderColor}),
+        tracer = create("Line", {Thickness = ESP_SETTINGS.TracerThickness, Color = ESP_SETTINGS.TracerColor}),
+        boxBorder = create("Square", {Thickness = 3, Color = ESP_SETTINGS.BoxBorderColor, Filled = false}),
+        box = create("Square", {Thickness = 1, Color = ESP_SETTINGS.BoxColor, Filled = false}),
+        cornerBoxBorderLines = createCornerBoxLines(ESP_SETTINGS.BoxBorderColor, 3),
+        cornerBoxLines = createCornerBoxLines(ESP_SETTINGS.BoxColor, 1),
         name = create("Text", {
             Outline = true,
-            Color = Color3.new(1, 1, 1),
+            Color = ESP_SETTINGS.NameColor,
             OutlineColor = Color3.new(0, 0, 0),
             Center = true,
             Size = 13,
         }),
-        healthBorder = create("Square", {Filled = true, Color = Color3.new(0,0,0)}),
-        health = create("Square", {Filled = true, Color = ESP_SETTINGS.MainThemeColor}),
+        healthBorder = create("Square", {Filled = true, Color = ESP_SETTINGS.HealthBorderColor}),
+        health = create("Square", {Filled = true, Color = ESP_SETTINGS.HealthColor}),
         distance = create("Text", {
             Outline = true,
-            Color = Color3.new(1, 1, 1),
+            Color = ESP_SETTINGS.DistanceColor,
             OutlineColor = Color3.new(0, 0, 0),
             Center = true,
             Size = 15,
@@ -168,8 +181,8 @@ local function createEsp(player)
         skeletonlines = {},
     }
     for _, bonePair in ipairs(bones) do
-        local borderLine = create("Line", {Thickness = 3, Color = ESP_SETTINGS.BorderColor})
-        local mainLine = create("Line", {Thickness = 1, Color = ESP_SETTINGS.MainThemeColor})
+        local borderLine = create("Line", {Thickness = 3, Color = ESP_SETTINGS.SkeletonBorderColor})
+        local mainLine = create("Line", {Thickness = 1, Color = ESP_SETTINGS.SkeletonColor})
         table.insert(esp.skeletonlines, {borderLine, mainLine, bonePair[1], bonePair[2]})
     end
     cache[player] = esp
@@ -182,21 +195,26 @@ local function updateEsp()
         local localTeam = getPlayerTeam(localPlayer)
         local isBehindWall = ESP_SETTINGS.WallCheck and isPlayerBehindWall(player)
         local shouldShow = false
-        local currentColor = ESP_SETTINGS.MainThemeColor
-        local borderColor = ESP_SETTINGS.BorderColor
+        local currentColor = nil
+        local borderColor = nil
 
         if ESP_SETTINGS.Enabled then
             if ESP_SETTINGS.WallCheck and isBehindWall then
                 if ESP_SETTINGS.ESPColorEnabled then
                     shouldShow = true
                     currentColor = ESP_SETTINGS.InvisColor
+                    borderColor = ESP_SETTINGS.BoxBorderColor
                 elseif ESP_SETTINGS.ESPVisible then
                     shouldShow = false
                 else
                     shouldShow = true
+                    currentColor = ESP_SETTINGS.BoxColor
+                    borderColor = ESP_SETTINGS.BoxBorderColor
                 end
             else
                 shouldShow = true
+                currentColor = ESP_SETTINGS.BoxColor
+                borderColor = ESP_SETTINGS.BoxBorderColor
             end
         else
             shouldShow = false
@@ -214,20 +232,21 @@ local function updateEsp()
                     local boxSize = Vector2.new(math.floor(charHeight * 0.6), math.floor(charHeight))
                     local boxPosition = Vector2.new(math.floor(hrp2D.X - boxSize.X / 2), math.floor(hrp2D.Y - boxSize.Y / 2))
 
-                    esp.tracer.Color = currentColor
-                    esp.tracerBorder.Color = borderColor
-                    esp.box.Color = currentColor
-                    esp.boxBorder.Color = borderColor
+                    -- Update colors every frame for dynamic color pickers
+                    esp.tracer.Color = ESP_SETTINGS.TracerColor
+                    esp.tracerBorder.Color = ESP_SETTINGS.TracerBorderColor
+                    esp.box.Color = ESP_SETTINGS.BoxColor
+                    esp.boxBorder.Color = ESP_SETTINGS.BoxBorderColor
 
                     for _, line in ipairs(esp.cornerBoxLines) do
-                        line.Color = currentColor
+                        line.Color = ESP_SETTINGS.BoxColor
                     end
                     for _, line in ipairs(esp.cornerBoxBorderLines) do
-                        line.Color = borderColor
+                        line.Color = ESP_SETTINGS.BoxBorderColor
                     end
                     for _, lineData in ipairs(esp.skeletonlines) do
-                        lineData[2].Color = currentColor
-                        lineData[1].Color = borderColor
+                        lineData[2].Color = ESP_SETTINGS.SkeletonColor
+                        lineData[1].Color = ESP_SETTINGS.SkeletonBorderColor
                     end
 
                     if ESP_SETTINGS.ShowBox then
@@ -262,7 +281,7 @@ local function updateEsp()
                         local pos = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y - 16)
                         esp.name.Text = player.Name
                         esp.name.Position = pos
-                        esp.name.Color = currentColor
+                        esp.name.Color = ESP_SETTINGS.NameColor
                         esp.name.Visible = true
                     else
                         esp.name.Visible = false
@@ -277,11 +296,11 @@ local function updateEsp()
                         esp.healthBorder.Position = Vector2.new(barX - 1, boxPosition.Y)
                         esp.healthBorder.Size = Vector2.new(HEALTH_BAR_WIDTH + 2, boxSize.Y)
                         esp.healthBorder.Visible = true
-                        esp.healthBorder.Color = Color3.new(0, 0, 0)
+                        esp.healthBorder.Color = ESP_SETTINGS.HealthBorderColor
 
                         esp.health.Position = Vector2.new(barX, barY)
                         esp.health.Size = Vector2.new(HEALTH_BAR_WIDTH, barHeight)
-                        esp.health.Color = Color3.new(1,0,0):Lerp(Color3.new(0,1,0), healthPerc)
+                        esp.health.Color = ESP_SETTINGS.HealthColor:Lerp(Color3.new(0,1,0), healthPerc)
                         esp.health.Visible = true
                     else
                         esp.healthBorder.Visible = false
@@ -293,7 +312,7 @@ local function updateEsp()
                         esp.distance.Text = string.format("[%d]", dist)
                         local distPos = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y + boxSize.Y + 2)
                         esp.distance.Position = distPos
-                        esp.distance.Color = currentColor
+                        esp.distance.Color = ESP_SETTINGS.DistanceColor
                         esp.distance.Visible = true
                     else
                         esp.distance.Visible = false
@@ -312,8 +331,8 @@ local function updateEsp()
                                     mainLine.To = Vector2.new(p2.X, p2.Y)
                                     borderLine.Visible = true
                                     mainLine.Visible = true
-                                    borderLine.Color = borderColor
-                                    mainLine.Color = currentColor
+                                    borderLine.Color = ESP_SETTINGS.SkeletonBorderColor
+                                    mainLine.Color = ESP_SETTINGS.SkeletonColor
                                 else
                                     borderLine.Visible = false
                                     mainLine.Visible = false
@@ -338,8 +357,8 @@ local function updateEsp()
                         esp.tracer.To = Vector2.new(hrp2D.X, hrp2D.Y)
                         esp.tracerBorder.Visible = true
                         esp.tracer.Visible = true
-                        esp.tracer.Color = currentColor
-                        esp.tracerBorder.Color = borderColor
+                        esp.tracer.Color = ESP_SETTINGS.TracerColor
+                        esp.tracerBorder.Color = ESP_SETTINGS.TracerBorderColor
                     else
                         esp.tracerBorder.Visible = false
                         esp.tracer.Visible = false
