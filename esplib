@@ -25,40 +25,33 @@ local ESP_SETTINGS = {
     Enabled = false,
     Teamcheck = false,
     WallCheck = true,
-
     ShowBox = false,
     BoxType = "Box",
     BoxColor = Color3.fromRGB(255, 255, 255),
     BoxBorderColor = Color3.fromRGB(0, 0, 0),
-
     ShowName = false,
     NameColor = Color3.fromRGB(255, 255, 255),
-
     ShowHealth = false,
     HealthLowColor = Color3.fromRGB(255, 0, 0),
     HealthHighColor = Color3.fromRGB(0, 255, 0),
     HealthBorderColor = Color3.fromRGB(0, 0, 0),
-
     ShowDistance = false,
     DistanceColor = Color3.fromRGB(255, 255, 255),
-
     ShowSkeletons = false,
     SkeletonColor = Color3.fromRGB(255, 255, 255),
     SkeletonBorderColor = Color3.fromRGB(0, 0, 0),
-
     ShowTracer = false,
     TracerPosition = "Bottom",
     TracerColor = Color3.fromRGB(255, 255, 255),
     TracerBorderColor = Color3.fromRGB(0, 0, 0),
-
     TracerThickness = 1,
-
     ESPColorEnabled = false,
     InvisColor = Color3.fromRGB(255, 0, 0),
     ESPVisible = false,
 }
 
 local HEALTH_BAR_WIDTH = 3
+local displayedHealthPerc = {}
 
 local function create(class, properties)
     local drawing = Drawing.new(class)
@@ -96,6 +89,7 @@ local function removeEsp(player)
         safeRemove(v)
     end
     cache[player] = nil
+    displayedHealthPerc[player] = nil
 end
 
 local function isPlayerBehindWall(player)
@@ -288,8 +282,13 @@ local function updateEsp()
                     end
 
                     if ESP_SETTINGS.ShowHealth then
-                        local healthPerc = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
-                        local barHeight = boxSize.Y * healthPerc
+                        local realHealthPerc = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
+                        local prevHealth = displayedHealthPerc[player] or 1
+                        local lerpSpeed = 0.1
+                        local newHealth = prevHealth + (realHealthPerc - prevHealth) * lerpSpeed
+                        displayedHealthPerc[player] = newHealth
+
+                        local barHeight = boxSize.Y * newHealth
                         local barX = boxPosition.X - HEALTH_BAR_WIDTH - 2
                         local barY = boxPosition.Y + boxSize.Y - barHeight
 
@@ -300,7 +299,7 @@ local function updateEsp()
 
                         esp.health.Position = Vector2.new(barX, barY)
                         esp.health.Size = Vector2.new(HEALTH_BAR_WIDTH, barHeight)
-                        esp.health.Color = ESP_SETTINGS.HealthLowColor:Lerp(ESP_SETTINGS.HealthHighColor, healthPerc)
+                        esp.health.Color = ESP_SETTINGS.HealthLowColor:Lerp(ESP_SETTINGS.HealthHighColor, newHealth)
                         esp.health.Visible = true
                     else
                         esp.healthBorder.Visible = false
