@@ -24,12 +24,12 @@ local bones = {
 local ESP_SETTINGS = {
     Enabled = false,
     Teamcheck = false,
-    TeamCheckESPMode = "Hide",
+    TeamCheckESPMode = "Hide", -- "Hide" or "ColorChange"
     TeamCheckESPColor = Color3.fromRGB(0, 255, 0),
     WallCheck = false,
-    WallCheckMode = "ColorChange",
+    WallCheckMode = "ColorChange", -- "Hide" or "ColorChange"
     ShowBox = false,
-    BoxType = "Box",
+    BoxType = "Box", -- "Box" or "Corner"
     BoxColor = Color3.fromRGB(255, 255, 255),
     BoxBorderColor = Color3.fromRGB(0, 0, 0),
     ShowName = false,
@@ -49,6 +49,9 @@ local ESP_SETTINGS = {
     TracerBorderColor = Color3.fromRGB(0, 0, 0),
     TracerThickness = 1,
     InvisColor = Color3.fromRGB(255, 0, 0),
+    -- New tables to specify which ESP parts to hide on wall and team hide modes
+    WallCheckHideTypes = {"Box", "Tracer"},
+    TeamCheckHideTypes = {"Box", "Tracer"},
 }
 
 local HEALTH_BAR_WIDTH = 3
@@ -145,9 +148,7 @@ local function updateCornerBoxLines(lines, pos, size)
 end
 
 local function getPlayerTeam(player)
-    if player.Team then return player.Team end
-    local attr = player:GetAttribute("Team") or player:GetAttribute("team")
-    return attr
+    return player.Team
 end
 
 local function createEsp(player)
@@ -200,6 +201,7 @@ local function updateEsp()
         local nameColor = ESP_SETTINGS.NameColor
         local distanceColor = ESP_SETTINGS.DistanceColor
 
+        -- Decide if player should show based on team check
         if ESP_SETTINGS.Enabled then
             if ESP_SETTINGS.Teamcheck and playerTeam and localTeam and playerTeam == localTeam then
                 if ESP_SETTINGS.TeamCheckESPMode == "Hide" then
@@ -207,11 +209,14 @@ local function updateEsp()
                 elseif ESP_SETTINGS.TeamCheckESPMode == "ColorChange" then
                     shouldShow = true
                     boxMainColor = ESP_SETTINGS.TeamCheckESPColor
+                else
+                    shouldShow = true
                 end
             else
                 shouldShow = true
             end
 
+            -- If player behind wall and wall check enabled
             if shouldShow and ESP_SETTINGS.WallCheck and isBehindWall then
                 if ESP_SETTINGS.WallCheckMode == "ColorChange" then
                     boxMainColor = ESP_SETTINGS.InvisColor
@@ -223,7 +228,37 @@ local function updateEsp()
             shouldShow = false
         end
 
-        if character and shouldShow then
+        -- Early removal if should not show
+        if not shouldShow then
+            -- But selectively hide parts if hide due to wall or team
+            local hideWall = ESP_SETTINGS.WallCheck and isBehindWall and ESP_SETTINGS.WallCheckMode == "Hide"
+            local hideTeam = ESP_SETTINGS.Teamcheck and playerTeam and localTeam and playerTeam == localTeam and ESP_SETTINGS.TeamCheckESPMode == "Hide"
+            local hideBox = (hideWall and table.find(ESP_SETTINGS.WallCheckHideTypes, "Box")) or (hideTeam and table.find(ESP_SETTINGS.TeamCheckHideTypes, "Box"))
+            local hideTracer = (hideWall and table.find(ESP_SETTINGS.WallCheckHideTypes, "Tracer")) or (hideTeam and table.find(ESP_SETTINGS.TeamCheckHideTypes, "Tracer"))
+
+            -- Set visibility accordingly:
+            esp.box.Visible = not hideBox
+            esp.boxBorder.Visible = not hideBox
+            for _, line in ipairs(esp.cornerBoxLines) do line.Visible = not hideBox end
+            for _, line in ipairs(esp.cornerBoxBorderLines) do line.Visible = not hideBox end
+
+            esp.tracer.Visible = not hideTracer
+            esp.tracerBorder.Visible = not hideTracer
+
+            esp.name.Visible = false
+            esp.distance.Visible = false
+            esp.health.Visible = false
+            esp.healthBorder.Visible = false
+            for _, lineData in ipairs(esp.skeletonlines) do
+                lineData[1].Visible = false
+                lineData[2].Visible = false
+            end
+
+            continue
+        end
+
+        -- Normal ESP drawing when shouldShow = true
+        if character then
             local rootPart = character:FindFirstChild("HumanoidRootPart")
             local head = character:FindFirstChild("Head")
             local humanoid = character:FindFirstChild("Humanoid")
@@ -403,22 +438,6 @@ local function updateEsp()
                     lineData[2].Visible = false
                 end
             end
-        else
-            for _, v in pairs(esp) do
-                if type(v) == "table" then
-                    for _, obj in ipairs(v) do
-                        if obj.Visible ~= nil then
-                            obj.Visible = false
-                        end
-                    end
-                elseif v.Visible ~= nil then
-                    v.Visible = false
-                end
-            end
-            for _, lineData in ipairs(esp.skeletonlines) do
-                lineData[1].Visible = false
-                lineData[2].Visible = false
-            end
         end
     end
 end
@@ -449,4 +468,5 @@ Players.PlayerRemoving:Connect(onPlayerRemoving)
 RunService.RenderStepped:Connect(function()
     updateEsp()
 end)
-return(ESP_SETTINGS)
+
+return ESP_SETTINGS
