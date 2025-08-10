@@ -238,6 +238,13 @@ local function updateCornerBoxLines(lines, pos, size)
     end
 end
 
+-- FIXED: Function to update corner box colors
+local function updateCornerBoxColors(lines, color)
+    for _, line in ipairs(lines) do
+        line.Color = color
+    end
+end
+
 local function createEsp(player)
     local esp = {
         tracerBorder = create("Line", {Thickness = ESP_SETTINGS.TracerThickness + 2, Color = ESP_SETTINGS.TracerBorderColor, Visible = false}),
@@ -251,7 +258,7 @@ local function createEsp(player)
             Color = ESP_SETTINGS.NameColor,
             OutlineColor = Color3.new(0, 0, 0),
             Center = true,
-            Size = 13,
+            Size = 11, -- REDUCED from 13 to 11
             Visible = false
         }),
         healthBorder = create("Square", {Filled = true, Color = ESP_SETTINGS.HealthBorderColor, Visible = false}),
@@ -261,7 +268,7 @@ local function createEsp(player)
             Color = ESP_SETTINGS.DistanceColor,
             OutlineColor = Color3.new(0, 0, 0),
             Center = true,
-            Size = 15,
+            Size = 12, -- REDUCED from 15 to 12
             Visible = false
         }),
         skeletonlines = {},
@@ -378,12 +385,10 @@ local function updateEsp()
         esp.name.Color = nameColor
         esp.distance.Color = distanceColor
         
-        for _, line in ipairs(esp.cornerBoxLines) do
-            line.Color = boxMainColor
-        end
-        for _, line in ipairs(esp.cornerBoxBorderLines) do
-            line.Color = boxBorderColor
-        end
+        -- FIXED: Update corner box colors properly
+        updateCornerBoxColors(esp.cornerBoxLines, boxMainColor)
+        updateCornerBoxColors(esp.cornerBoxBorderLines, boxBorderColor)
+        
         for _, lineData in ipairs(esp.skeletonlines) do
             lineData[2].Color = skeletonColor
             lineData[1].Color = skeletonBorderColor
