@@ -39,8 +39,9 @@ local ESP_SETTINGS = {
     TracerPosition = "Bottom",
     SkeletonVisible = false,
     SkeletonColor = false,
-    ESPVisible = false,           -- When true, hide ESP if behind wall
-    ESPColor = Color3.fromRGB(255, 0, 0) -- Color for behind-wall ESP if ESPVisible is false
+    ESPColorEnabled = false,          -- NEW: whether ESP recolor behind wall is enabled
+    InvisColor = Color3.fromRGB(255, 0, 0), -- NEW: color used if ESPColorEnabled and behind wall
+    ESPVisible = false                 -- if true, hide ESP when behind wall (only if ESPColorEnabled is false)
 }
 
 local HEALTH_BAR_WIDTH = 3
@@ -88,12 +89,10 @@ local function isPlayerBehindWall(player)
     if not character then return false end
     local rootPart = character:FindFirstChild("HumanoidRootPart")
     if not rootPart then return false end
-
     local params = RaycastParams.new()
     params.FilterDescendantsInstances = {localPlayer.Character, character}
     params.FilterType = Enum.RaycastFilterType.Blacklist
     params.IgnoreWater = true
-
     local origin = camera.CFrame.Position
     local direction = rootPart.Position - origin
     local result = workspace:Raycast(origin, direction, params)
@@ -115,31 +114,22 @@ end
 local function updateCornerBoxLines(lines, pos, size)
     local lineLengthW = size.X / 4
     local lineLengthH = size.Y / 4
-
     lines[1].From = pos
     lines[1].To = Vector2.new(pos.X + lineLengthW, pos.Y)
-
     lines[2].From = pos
     lines[2].To = Vector2.new(pos.X, pos.Y + lineLengthH)
-
     lines[3].From = Vector2.new(pos.X + size.X, pos.Y)
     lines[3].To = Vector2.new(pos.X + size.X - lineLengthW, pos.Y)
-
     lines[4].From = Vector2.new(pos.X + size.X, pos.Y)
     lines[4].To = Vector2.new(pos.X + size.X, pos.Y + lineLengthH)
-
     lines[5].From = Vector2.new(pos.X, pos.Y + size.Y)
     lines[5].To = Vector2.new(pos.X + lineLengthW, pos.Y + size.Y)
-
     lines[6].From = Vector2.new(pos.X, pos.Y + size.Y)
     lines[6].To = Vector2.new(pos.X, pos.Y + size.Y - lineLengthH)
-
     lines[7].From = Vector2.new(pos.X + size.X, pos.Y + size.Y)
     lines[7].To = Vector2.new(pos.X + size.X - lineLengthW, pos.Y + size.Y)
-
     lines[8].From = Vector2.new(pos.X + size.X, pos.Y + size.Y)
     lines[8].To = Vector2.new(pos.X + size.X, pos.Y + size.Y - lineLengthH)
-
     for _, line in ipairs(lines) do
         line.Visible = true
     end
@@ -155,13 +145,10 @@ local function createEsp(player)
     local esp = {
         tracerBorder = create("Line", {Thickness = ESP_SETTINGS.TracerThickness + 2, Color = ESP_SETTINGS.BorderColor}),
         tracer = create("Line", {Thickness = ESP_SETTINGS.TracerThickness, Color = ESP_SETTINGS.MainThemeColor}),
-
         boxBorder = create("Square", {Thickness = 3, Color = ESP_SETTINGS.BorderColor, Filled = false}),
         box = create("Square", {Thickness = 1, Color = ESP_SETTINGS.MainThemeColor, Filled = false}),
-
         cornerBoxBorderLines = createCornerBoxLines(ESP_SETTINGS.BorderColor, 3),
         cornerBoxLines = createCornerBoxLines(ESP_SETTINGS.MainThemeColor, 1),
-
         name = create("Text", {
             Outline = true,
             Color = Color3.new(1, 1, 1),
@@ -169,10 +156,8 @@ local function createEsp(player)
             Center = true,
             Size = 13,
         }),
-
         healthBorder = create("Square", {Filled = true, Color = Color3.new(0,0,0)}),
         health = create("Square", {Filled = true, Color = ESP_SETTINGS.MainThemeColor}),
-
         distance = create("Text", {
             Outline = true,
             Color = Color3.new(1, 1, 1),
@@ -180,51 +165,33 @@ local function createEsp(player)
             Center = true,
             Size = 15,
         }),
-
         skeletonlines = {},
     }
-
     for _, bonePair in ipairs(bones) do
         local borderLine = create("Line", {Thickness = 3, Color = ESP_SETTINGS.BorderColor})
         local mainLine = create("Line", {Thickness = 1, Color = ESP_SETTINGS.MainThemeColor})
         table.insert(esp.skeletonlines, {borderLine, mainLine, bonePair[1], bonePair[2]})
     end
-
     cache[player] = esp
 end
 
 local function updateEsp()
     for player, esp in pairs(cache) do
-        esp.tracer.Color = ESP_SETTINGS.MainThemeColor
-        esp.tracerBorder.Color = ESP_SETTINGS.BorderColor
-        esp.box.Color = ESP_SETTINGS.MainThemeColor
-        esp.boxBorder.Color = ESP_SETTINGS.BorderColor
-
-        for _, line in ipairs(esp.cornerBoxLines) do
-            line.Color = ESP_SETTINGS.MainThemeColor
-        end
-        for _, line in ipairs(esp.cornerBoxBorderLines) do
-            line.Color = ESP_SETTINGS.BorderColor
-        end
-
-        for _, lineData in ipairs(esp.skeletonlines) do
-            lineData[2].Color = ESP_SETTINGS.MainThemeColor
-            lineData[1].Color = ESP_SETTINGS.BorderColor
-        end
-
         local character = player.Character
         local playerTeam = getPlayerTeam(player)
         local localTeam = getPlayerTeam(localPlayer)
-
         local isBehindWall = ESP_SETTINGS.WallCheck and isPlayerBehindWall(player)
+        local shouldShow = false
+        local currentColor = ESP_SETTINGS.MainThemeColor
+        local borderColor = ESP_SETTINGS.BorderColor
 
-        local shouldShow
         if ESP_SETTINGS.Enabled then
-            if ESP_SETTINGS.WallCheck then
-                if ESP_SETTINGS.ESPVisible then
-                    shouldShow = not isBehindWall
-                elseif ESP_SETTINGS.ESPColor then
+            if ESP_SETTINGS.WallCheck and isBehindWall then
+                if ESP_SETTINGS.ESPColorEnabled then
                     shouldShow = true
+                    currentColor = ESP_SETTINGS.InvisColor
+                elseif ESP_SETTINGS.ESPVisible then
+                    shouldShow = false
                 else
                     shouldShow = true
                 end
@@ -247,14 +214,6 @@ local function updateEsp()
                     local boxSize = Vector2.new(math.floor(charHeight * 0.6), math.floor(charHeight))
                     local boxPosition = Vector2.new(math.floor(hrp2D.X - boxSize.X / 2), math.floor(hrp2D.Y - boxSize.Y / 2))
 
-                    local currentColor
-                    if isBehindWall and ESP_SETTINGS.WallCheck and ESP_SETTINGS.ESPColor then
-                        currentColor = ESP_SETTINGS.ESPColor
-                    else
-                        currentColor = ESP_SETTINGS.MainThemeColor
-                    end
-                    local borderColor = ESP_SETTINGS.BorderColor
-
                     esp.tracer.Color = currentColor
                     esp.tracerBorder.Color = borderColor
                     esp.box.Color = currentColor
@@ -266,7 +225,6 @@ local function updateEsp()
                     for _, line in ipairs(esp.cornerBoxBorderLines) do
                         line.Color = borderColor
                     end
-
                     for _, lineData in ipairs(esp.skeletonlines) do
                         lineData[2].Color = currentColor
                         lineData[1].Color = borderColor
@@ -354,7 +312,6 @@ local function updateEsp()
                                     mainLine.To = Vector2.new(p2.X, p2.Y)
                                     borderLine.Visible = true
                                     mainLine.Visible = true
-
                                     borderLine.Color = borderColor
                                     mainLine.Color = currentColor
                                 else
@@ -381,7 +338,6 @@ local function updateEsp()
                         esp.tracer.To = Vector2.new(hrp2D.X, hrp2D.Y)
                         esp.tracerBorder.Visible = true
                         esp.tracer.Visible = true
-
                         esp.tracer.Color = currentColor
                         esp.tracerBorder.Color = borderColor
                     else
