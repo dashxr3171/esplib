@@ -79,7 +79,6 @@ local function removeEsp(player)
     cache[player] = nil
 end
 
--- Modern raycast for wall check
 local function isPlayerBehindWall(player)
     local character = player.Character
     if not character then return false end
@@ -161,8 +160,8 @@ local function createEsp(player)
 
         name = create("Text", {
             Outline = true,
-            Color = Color3.new(1, 1, 1),          -- White text
-            OutlineColor = Color3.new(0, 0, 0),   -- Black outline
+            Color = Color3.new(1, 1, 1),
+            OutlineColor = Color3.new(0, 0, 0),
             Center = true,
             Size = 13,
         }),
@@ -172,8 +171,8 @@ local function createEsp(player)
 
         distance = create("Text", {
             Outline = true,
-            Color = Color3.new(1, 1, 1),          -- White text
-            OutlineColor = Color3.new(0, 0, 0),   -- Black outline
+            Color = Color3.new(1, 1, 1),
+            OutlineColor = Color3.new(0, 0, 0),
             Center = true,
             Size = 15,
         }),
@@ -208,9 +207,6 @@ local function updateEsp()
             lineData[2].Color = ESP_SETTINGS.MainThemeColor
             lineData[1].Color = ESP_SETTINGS.BorderColor
         end
-
-        -- Name and Distance colors are fixed to white/black outline
-        -- so no update needed here.
 
         local character = player.Character
         local playerTeam = getPlayerTeam(player)
@@ -259,7 +255,7 @@ local function updateEsp()
                         for _, line in ipairs(esp.cornerBoxLines) do line.Visible = false end
                     end
 
-                    -- Name (always white with black outline)
+                    -- Name
                     if ESP_SETTINGS.ShowName then
                         local pos = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y - 16)
                         esp.name.Text = player.Name
@@ -290,7 +286,7 @@ local function updateEsp()
                         esp.health.Visible = false
                     end
 
-                    -- Distance (always white with black outline)
+                    -- Distance
                     if ESP_SETTINGS.ShowDistance then
                         local dist = math.floor((camera.CFrame.Position - rootPart.Position).Magnitude + 0.5)
                         esp.distance.Text = string.format("[%d]", dist)
@@ -301,38 +297,35 @@ local function updateEsp()
                         esp.distance.Visible = false
                     end
 
-                    -- Skeleton lines (respect WallCheck and shouldShow)
-if ESP_SETTINGS.ShowSkeletons and shouldShow then
-    for _, lineData in ipairs(esp.skeletonlines) do
-        local borderLine, mainLine, parentBone, childBone = unpack(lineData)
-        if character:FindFirstChild(parentBone) and character:FindFirstChild(childBone) then
-            local p1, onScreen1 = camera:WorldToViewportPoint(character[parentBone].Position)
-            local p2, onScreen2 = camera:WorldToViewportPoint(character[childBone].Position)
-            if onScreen1 and onScreen2 then
-                borderLine.From = Vector2.new(p1.X, p1.Y)
-                borderLine.To = Vector2.new(p2.X, p2.Y)
-                mainLine.From = Vector2.new(p1.X, p1.Y)
-                mainLine.To = Vector2.new(p2.X, p2.Y)
-                borderLine.Visible = true
-                mainLine.Visible = true
-            else
-                borderLine.Visible = false
-                mainLine.Visible = false
-            end
-        else
-            borderLine.Visible = false
-            mainLine.Visible = false
-        end
-    end
-else
-    -- Hide ALL skeleton lines explicitly when not shown or behind wall
-    for _, lineData in ipairs(esp.skeletonlines) do
-        lineData[1].Visible = false
-        lineData[2].Visible = false
-    end
-end
-
-
+                    -- Skeleton lines
+                    if ESP_SETTINGS.ShowSkeletons then
+                        for _, lineData in ipairs(esp.skeletonlines) do
+                            local borderLine, mainLine, parentBone, childBone = unpack(lineData)
+                            if character:FindFirstChild(parentBone) and character:FindFirstChild(childBone) then
+                                local p1, onScreen1 = camera:WorldToViewportPoint(character[parentBone].Position)
+                                local p2, onScreen2 = camera:WorldToViewportPoint(character[childBone].Position)
+                                if onScreen1 and onScreen2 then
+                                    borderLine.From = Vector2.new(p1.X, p1.Y)
+                                    borderLine.To = Vector2.new(p2.X, p2.Y)
+                                    mainLine.From = Vector2.new(p1.X, p1.Y)
+                                    mainLine.To = Vector2.new(p2.X, p2.Y)
+                                    borderLine.Visible = true
+                                    mainLine.Visible = true
+                                else
+                                    borderLine.Visible = false
+                                    mainLine.Visible = false
+                                end
+                            else
+                                borderLine.Visible = false
+                                mainLine.Visible = false
+                            end
+                        end
+                    else
+                        for _, lineData in ipairs(esp.skeletonlines) do
+                            lineData[1].Visible = false
+                            lineData[2].Visible = false
+                        end
+                    end
 
                     -- Tracer
                     if ESP_SETTINGS.ShowTracer then
@@ -348,7 +341,7 @@ end
                         esp.tracer.Visible = false
                     end
                 else
-                    -- Not on screen, hide all
+                    -- Not on screen: hide all esp elements including skeleton lines
                     for _, v in pairs(esp) do
                         if type(v) == "table" then
                             for _, obj in ipairs(v) do
@@ -360,9 +353,13 @@ end
                             v.Visible = false
                         end
                     end
+                    for _, lineData in ipairs(esp.skeletonlines) do
+                        lineData[1].Visible = false
+                        lineData[2].Visible = false
+                    end
                 end
             else
-                -- Missing parts or disabled, hide all
+                -- Missing parts or disabled: hide all esp including skeleton lines
                 for _, v in pairs(esp) do
                     if type(v) == "table" then
                         for _, obj in ipairs(v) do
@@ -374,9 +371,13 @@ end
                         v.Visible = false
                     end
                 end
+                for _, lineData in ipairs(esp.skeletonlines) do
+                    lineData[1].Visible = false
+                    lineData[2].Visible = false
+                end
             end
         else
-            -- Team check failed or no character, hide all
+            -- Team check failed or no character: hide all esp including skeleton lines
             for _, v in pairs(esp) do
                 if type(v) == "table" then
                     for _, obj in ipairs(v) do
@@ -387,6 +388,10 @@ end
                 elseif v.Visible ~= nil then
                     v.Visible = false
                 end
+            end
+            for _, lineData in ipairs(esp.skeletonlines) do
+                lineData[1].Visible = false
+                lineData[2].Visible = false
             end
         end
     end
