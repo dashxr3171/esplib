@@ -193,7 +193,7 @@ local function updateEsp()
         local distanceColor = ESP_SETTINGS.DistanceColor
 
         if ESP_SETTINGS.Enabled then
-            if ESP_SETTINGS.Teamcheck and playerTeam and localTeam and playerTeam.Name == localTeam.Name then
+            if ESP_SETTINGS.Teamcheck and playerTeam and localTeam and playerTeam == localTeam then
                 if ESP_SETTINGS.TeamCheckESPMode == "Hide" then
                     shouldShow = false
                 elseif ESP_SETTINGS.TeamCheckESPMode == "ColorChange" then
