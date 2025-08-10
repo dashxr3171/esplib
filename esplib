@@ -24,6 +24,8 @@ local bones = {
 local ESP_SETTINGS = {
     Enabled = false,
     Teamcheck = false,
+    TeamCheckESPMode = "Hide",
+    TeamCheckESPColor = Color3.fromRGB(0, 255, 0),
     WallCheck = false,
     WallCheckMode = "ColorChange",
     ShowBox = false,
@@ -189,69 +191,58 @@ local function updateEsp()
         local localTeam = getPlayerTeam(localPlayer)
         local isBehindWall = ESP_SETTINGS.WallCheck and isPlayerBehindWall(player)
         local shouldShow = false
-        local currentColor = nil
-        local borderColor = nil
+        local boxMainColor = ESP_SETTINGS.BoxColor
+        local boxBorderColor = ESP_SETTINGS.BoxBorderColor
+        local skeletonColor = ESP_SETTINGS.SkeletonColor
+        local skeletonBorderColor = ESP_SETTINGS.SkeletonBorderColor
+        local tracerColor = ESP_SETTINGS.TracerColor
+        local tracerBorderColor = ESP_SETTINGS.TracerBorderColor
+        local nameColor = ESP_SETTINGS.NameColor
+        local distanceColor = ESP_SETTINGS.DistanceColor
 
         if ESP_SETTINGS.Enabled then
-            if ESP_SETTINGS.WallCheck and isBehindWall then
-                if ESP_SETTINGS.WallCheckMode == "ColorChange" then
-                    shouldShow = true
-                    currentColor = ESP_SETTINGS.InvisColor
-                    borderColor = ESP_SETTINGS.InvisColor
-                elseif ESP_SETTINGS.WallCheckMode == "Hide" then
+            if ESP_SETTINGS.Teamcheck and playerTeam and localTeam and playerTeam == localTeam then
+                if ESP_SETTINGS.TeamCheckESPMode == "Hide" then
                     shouldShow = false
-                else
+                elseif ESP_SETTINGS.TeamCheckESPMode == "ColorChange" then
                     shouldShow = true
-                    currentColor = ESP_SETTINGS.BoxColor
-                    borderColor = ESP_SETTINGS.BoxBorderColor
+                    boxMainColor = ESP_SETTINGS.TeamCheckESPColor
                 end
             else
                 shouldShow = true
-                currentColor = ESP_SETTINGS.BoxColor
-                borderColor = ESP_SETTINGS.BoxBorderColor
+            end
+
+            if shouldShow and ESP_SETTINGS.WallCheck and isBehindWall then
+                if ESP_SETTINGS.WallCheckMode == "ColorChange" then
+                    boxMainColor = ESP_SETTINGS.InvisColor
+                elseif ESP_SETTINGS.WallCheckMode == "Hide" then
+                    shouldShow = false
+                end
             end
         else
             shouldShow = false
         end
 
-        if character and (not ESP_SETTINGS.Teamcheck or (playerTeam and localTeam and playerTeam ~= localTeam)) then
+        if character and shouldShow then
             local rootPart = character:FindFirstChild("HumanoidRootPart")
             local head = character:FindFirstChild("Head")
             local humanoid = character:FindFirstChild("Humanoid")
 
-            if rootPart and head and humanoid and shouldShow then
+            if rootPart and head and humanoid then
                 local hrp2D, onScreen = camera:WorldToViewportPoint(rootPart.Position)
                 if onScreen then
                     local charHeight = math.abs(camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0)).Y - camera:WorldToViewportPoint(rootPart.Position + Vector3.new(0, 2.6, 0)).Y)
                     local boxSize = Vector2.new(math.floor(charHeight * 0.6), math.floor(charHeight))
                     local boxPosition = Vector2.new(math.floor(hrp2D.X - boxSize.X / 2), math.floor(hrp2D.Y - boxSize.Y / 2))
 
-                    local espColor = currentColor or ESP_SETTINGS.BoxColor
-                    local espBorderColor = borderColor or ESP_SETTINGS.BoxBorderColor
-                    local skeletonColor = ESP_SETTINGS.SkeletonColor
-                    local skeletonBorderColor = ESP_SETTINGS.SkeletonBorderColor
-                    local tracerColor = ESP_SETTINGS.TracerColor
-                    local tracerBorderColor = ESP_SETTINGS.TracerBorderColor
-                    local nameColor = ESP_SETTINGS.NameColor
-                    local distanceColor = ESP_SETTINGS.DistanceColor
-
-                    if ESP_SETTINGS.WallCheck and isBehindWall and ESP_SETTINGS.WallCheckMode == "ColorChange" then
-                        skeletonColor = ESP_SETTINGS.InvisColor
-                        skeletonBorderColor = ESP_SETTINGS.InvisColor
-                        tracerColor = ESP_SETTINGS.InvisColor
-                        tracerBorderColor = ESP_SETTINGS.InvisColor
-                        nameColor = ESP_SETTINGS.InvisColor
-                        distanceColor = ESP_SETTINGS.InvisColor
-                    end
-
-                    esp.box.Color = espColor
-                    esp.boxBorder.Color = espBorderColor
+                    esp.box.Color = boxMainColor
+                    esp.boxBorder.Color = boxBorderColor
 
                     for _, line in ipairs(esp.cornerBoxLines) do
-                        line.Color = espColor
+                        line.Color = boxMainColor
                     end
                     for _, line in ipairs(esp.cornerBoxBorderLines) do
-                        line.Color = espBorderColor
+                        line.Color = boxBorderColor
                     end
 
                     for _, lineData in ipairs(esp.skeletonlines) do
@@ -432,24 +423,30 @@ local function updateEsp()
     end
 end
 
-for _, player in ipairs(Players:GetPlayers()) do
+local function onPlayerAdded(player)
+    player.CharacterAdded:Connect(function()
+        wait(1)
+        if not cache[player] then
+            createEsp(player)
+        end
+    end)
+    createEsp(player)
+end
+
+local function onPlayerRemoving(player)
+    removeEsp(player)
+end
+
+for _, player in pairs(Players:GetPlayers()) do
     if player ~= localPlayer then
-        createEsp(player)
+        onPlayerAdded(player)
     end
 end
 
-Players.PlayerAdded:Connect(function(player)
-    if player ~= localPlayer then
-        createEsp(player)
-    end
-end)
-
-Players.PlayerRemoving:Connect(function(player)
-    removeEsp(player)
-end)
+Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(onPlayerRemoving)
 
 RunService.RenderStepped:Connect(function()
     updateEsp()
 end)
-
 return(ESP_SETTINGS)
