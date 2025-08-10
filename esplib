@@ -22,19 +22,19 @@ local bones = {
 }
 
 local ESP_SETTINGS = {
-    Enabled = true, -- Changed to true for testing
-    Teamcheck = false,
+    Enabled = true,
+    Teamcheck = true, -- ENABLED NOW!
     TeamCheckESPMode = "Hide", -- "Hide" or "ColorChange"
     TeamCheckESPColor = Color3.fromRGB(0, 255, 0),
     WallCheck = false,
     WallCheckMode = "ColorChange", -- "ColorChange" or "Hide"
-    ShowBox = false, -- Changed to true for testing
+    ShowBox = true, -- ENABLED FOR TESTING
     BoxType = "Corner",
     BoxColor = Color3.fromRGB(255, 255, 255),
     BoxBorderColor = Color3.fromRGB(0, 0, 0),
     ShowBoxFilled = false,
     BoxFillColor = Color3.fromRGB(255, 255, 255),
-    ShowName = false, -- Changed to true for testing
+    ShowName = true, -- ENABLED FOR TESTING
     NameColor = Color3.fromRGB(255, 255, 255),
     ShowHealth = false,
     HealthLowColor = Color3.fromRGB(255, 0, 0),
@@ -50,11 +50,55 @@ local ESP_SETTINGS = {
     TracerColor = Color3.fromRGB(255, 255, 255),
     TracerBorderColor = Color3.fromRGB(0, 0, 0),
     TracerThickness = 1,
-    InvisColor = Color3.fromRGB(255, 0, 0), -- Red color for players behind walls
+    InvisColor = Color3.fromRGB(255, 0, 0),
 }
 
 local HEALTH_BAR_WIDTH = 3
 local displayedHealthPerc = {}
+
+-- Function to check if two players are teammates
+local function areTeammates(player1, player2)
+    if not player1 or not player2 then return false end
+    
+    -- Method 1: Check Team objects
+    local team1 = player1.Team
+    local team2 = player2.Team
+    if team1 and team2 and team1 == team2 then
+        print("TEAMS MATCH (Team Objects):", team1.Name)
+        return true
+    end
+    
+    -- Method 2: Check TeamColor (some games use this)
+    if team1 and team2 and team1.TeamColor == team2.TeamColor then
+        print("TEAMS MATCH (Team Colors):", tostring(team1.TeamColor))
+        return true
+    end
+    
+    -- Method 3: Check custom team attributes
+    local attr1 = player1:GetAttribute("Team")
+    local attr2 = player2:GetAttribute("Team")
+    if attr1 and attr2 and attr1 == attr2 then
+        print("TEAMS MATCH (Attributes):", attr1)
+        return true
+    end
+    
+    -- Method 4: Check if players are in same group/faction (some games use this)
+    local faction1 = player1:GetAttribute("Faction")
+    local faction2 = player2:GetAttribute("Faction")
+    if faction1 and faction2 and faction1 == faction2 then
+        print("TEAMS MATCH (Faction):", faction1)
+        return true
+    end
+    
+    -- Method 5: Check if both have no team (neutral players)
+    if not team1 and not team2 and not attr1 and not attr2 then
+        print("BOTH PLAYERS NEUTRAL")
+        return false -- Don't consider neutral players as teammates
+    end
+    
+    print("NO TEAM MATCH FOUND")
+    return false
+end
 
 local function create(class, properties)
     local drawing = Drawing.new(class)
@@ -99,14 +143,12 @@ local function hideAllEsp(esp)
     for _, v in pairs(esp) do
         if type(v) == "table" then
             if v[1] and v[1].Visible ~= nil then
-                -- Handle skeleton lines
                 for _, lineData in ipairs(v) do
                     if lineData.Visible ~= nil then
                         lineData.Visible = false
                     end
                 end
             else
-                -- Handle other table types
                 for _, obj in ipairs(v) do
                     if obj and obj.Visible ~= nil then
                         obj.Visible = false
@@ -118,7 +160,6 @@ local function hideAllEsp(esp)
         end
     end
     
-    -- Handle skeleton lines specifically
     if esp.skeletonlines then
         for _, lineData in ipairs(esp.skeletonlines) do
             if lineData[1] and lineData[1].Visible ~= nil then
@@ -248,41 +289,26 @@ local function updateEsp()
             continue
         end
         
-        -- Check if we should show ESP for this player
-        local shouldShowESP = true
-        local isTeammate = false
-        
-        -- Team check
+        -- TEAM CHECK - This is the important part!
         if ESP_SETTINGS.Teamcheck then
-            local localTeam = localPlayer.Team
-            local playerTeam = player.Team
+            print("=== CHECKING TEAMS ===")
+            print("Local Player:", localPlayer.Name, "Team:", localPlayer.Team and localPlayer.Team.Name or "nil")
+            print("Target Player:", player.Name, "Team:", player.Team and player.Team.Name or "nil")
             
-            -- Also check for team attributes as backup
-            if not localTeam then
-                localTeam = localPlayer:GetAttribute("Team")
-            end
-            if not playerTeam then
-                playerTeam = player:GetAttribute("Team")
-            end
-            
-            if localTeam and playerTeam and localTeam == playerTeam then
-                isTeammate = true
+            if areTeammates(localPlayer, player) then
+                print("TEAMMATE DETECTED! Mode:", ESP_SETTINGS.TeamCheckESPMode)
                 if ESP_SETTINGS.TeamCheckESPMode == "Hide" then
-                    shouldShowESP = false
+                    print("HIDING TEAMMATE ESP")
+                    hideAllEsp(esp)
+                    continue -- Skip to next player
                 end
             end
-        end
-        
-        -- If we shouldn't show ESP, hide everything and continue
-        if not shouldShowESP then
-            hideAllEsp(esp)
-            continue
+            print("======================")
         end
         
         -- Wall check
         local isBehindWall = ESP_SETTINGS.WallCheck and isPlayerBehindWall(player)
         
-        -- If wall check is enabled and mode is "Hide", hide ESP for players behind walls
         if isBehindWall and ESP_SETTINGS.WallCheckMode == "Hide" then
             hideAllEsp(esp)
             continue
@@ -308,7 +334,7 @@ local function updateEsp()
         local boxSize = Vector2.new(math.floor(charHeight * 0.6), math.floor(charHeight))
         local boxPosition = Vector2.new(math.floor(hrp2D.X - boxSize.X / 2), math.floor(hrp2D.Y - boxSize.Y / 2))
         
-        -- Determine colors based on team and wall status
+        -- Determine colors
         local boxMainColor = ESP_SETTINGS.BoxColor
         local boxBorderColor = ESP_SETTINGS.BoxBorderColor
         local skeletonColor = ESP_SETTINGS.SkeletonColor
@@ -319,7 +345,7 @@ local function updateEsp()
         local distanceColor = ESP_SETTINGS.DistanceColor
         
         -- Apply team colors if teammate and ColorChange mode
-        if isTeammate and ESP_SETTINGS.TeamCheckESPMode == "ColorChange" then
+        if ESP_SETTINGS.Teamcheck and areTeammates(localPlayer, player) and ESP_SETTINGS.TeamCheckESPMode == "ColorChange" then
             boxMainColor = ESP_SETTINGS.TeamCheckESPColor
             skeletonColor = ESP_SETTINGS.TeamCheckESPColor
             tracerColor = ESP_SETTINGS.TeamCheckESPColor
