@@ -176,25 +176,13 @@ local function createEsp(player)
     cache[player] = esp
 end
 
-local function getTeamValue(player)
-    if player.Team then
-        return tostring(player.Team.Name)
-    end
-    local attrTeam = player:GetAttribute("Team")
-    if attrTeam then
-        return tostring(attrTeam)
-    end
-    return nil
-end
-
 local function updateEsp()
-    local localTeamVal = getTeamValue(localPlayer)
+    local localTeam = localPlayer.Team
     for player, esp in pairs(cache) do
         local character = player.Character
-        local playerTeamVal = getTeamValue(player)
+        local playerTeam = player.Team
         local isBehindWall = ESP_SETTINGS.WallCheck and isPlayerBehindWall(player)
         local shouldShow = false
-
         local boxMainColor = ESP_SETTINGS.BoxColor
         local boxBorderColor = ESP_SETTINGS.BoxBorderColor
         local skeletonColor = ESP_SETTINGS.SkeletonColor
@@ -204,29 +192,24 @@ local function updateEsp()
         local nameColor = ESP_SETTINGS.NameColor
         local distanceColor = ESP_SETTINGS.DistanceColor
 
-        if ESP_SETTINGS.Teamcheck then
-            if localTeamVal and playerTeamVal and localTeamVal == playerTeamVal then
-                if ESP_SETTINGS.TeamCheckESPMode == "Hide" then
-                    shouldShow = false
-                elseif ESP_SETTINGS.TeamCheckESPMode == "ColorChange" then
-                    shouldShow = true
-                    boxMainColor = ESP_SETTINGS.TeamCheckESPColor
-                    boxBorderColor = ESP_SETTINGS.TeamCheckESPColor
-                    skeletonColor = ESP_SETTINGS.TeamCheckESPColor
-                    skeletonBorderColor = ESP_SETTINGS.TeamCheckESPColor
-                    tracerColor = ESP_SETTINGS.TeamCheckESPColor
-                    tracerBorderColor = ESP_SETTINGS.TeamCheckESPColor
-                    nameColor = ESP_SETTINGS.TeamCheckESPColor
-                    distanceColor = ESP_SETTINGS.TeamCheckESPColor
-                else
-                    shouldShow = true
-                end
-            else
-                shouldShow = true
-            end
-        else
+      if ESP_SETTINGS.Teamcheck then
+    local localTeamVal = localPlayer.Team or localPlayer:GetAttribute("Team")
+    local playerTeamVal = player.Team or player:GetAttribute("Team")
+
+    if localTeamVal and playerTeamVal and localTeamVal == playerTeamVal then
+        if ESP_SETTINGS.TeamCheckESPMode == "Hide" then
+            shouldShow = false
+        elseif ESP_SETTINGS.TeamCheckESPMode == "ColorChange" then
             shouldShow = true
+            boxMainColor = ESP_SETTINGS.TeamCheckESPColor
         end
+    else
+        shouldShow = true
+    end
+else
+    shouldShow = true
+end
+
 
         if character and shouldShow then
             local rootPart = character:FindFirstChild("HumanoidRootPart")
@@ -287,6 +270,7 @@ local function updateEsp()
                             esp.boxBorder.Visible = false
                             esp.box.Visible = false
 
+                            -- Draw filled box for corner ESP as a smaller filled square behind corner lines
                             if ESP_SETTINGS.ShowBoxFilled then
                                 local fillInset = 4
                                 local fillPos = Vector2.new(boxPosition.X + fillInset, boxPosition.Y + fillInset)
@@ -412,7 +396,9 @@ local function updateEsp()
                     for _, v in pairs(esp) do
                         if type(v) == "table" then
                             for _, obj in ipairs(v) do
-                                obj.Visible = false
+                                if obj.Visible ~= nil then
+                                    obj.Visible = false
+                                end
                             end
                         elseif v.Visible ~= nil then
                             v.Visible = false
@@ -430,7 +416,9 @@ local function updateEsp()
                 for _, v in pairs(esp) do
                     if type(v) == "table" then
                         for _, obj in ipairs(v) do
-                            obj.Visible = false
+                            if obj.Visible ~= nil then
+                                obj.Visible = false
+                            end
                         end
                     elseif v.Visible ~= nil then
                         v.Visible = false
@@ -448,7 +436,9 @@ local function updateEsp()
             for _, v in pairs(esp) do
                 if type(v) == "table" then
                     for _, obj in ipairs(v) do
-                        obj.Visible = false
+                        if obj.Visible ~= nil then
+                            obj.Visible = false
+                        end
                     end
                 elseif v.Visible ~= nil then
                     v.Visible = false
@@ -465,13 +455,27 @@ local function updateEsp()
     end
 end
 
-Players.PlayerAdded:Connect(function(player)
-    player.CharacterAdded:Connect(function(character)
-        task.wait(1)
-        if ESP_SETTINGS.Enabled and not cache[player] then
+local function onPlayerAdded(player)
+    player.CharacterAdded:Connect(function()
+        wait(1)
+        if cache[player] == nil then
             createEsp(player)
         end
     end)
+end
+
+for _, player in pairs(Players:GetPlayers()) do
+    if player ~= localPlayer then
+        createEsp(player)
+        onPlayerAdded(player)
+    end
+end
+
+Players.PlayerAdded:Connect(function(player)
+    if player ~= localPlayer then
+        createEsp(player)
+        onPlayerAdded(player)
+    end
 end)
 
 Players.PlayerRemoving:Connect(function(player)
@@ -479,26 +483,7 @@ Players.PlayerRemoving:Connect(function(player)
 end)
 
 RunService.RenderStepped:Connect(function()
-    if ESP_SETTINGS.Enabled then
-        updateEsp()
-    else
-        for player in pairs(cache) do
-            removeEsp(player)
-        end
-    end
+    updateEsp()
 end)
 
-for _, player in pairs(Players:GetPlayers()) do
-    if player ~= localPlayer then
-        player.CharacterAdded:Connect(function(character)
-            task.wait(1)
-            if ESP_SETTINGS.Enabled and not cache[player] then
-                createEsp(player)
-            end
-        end)
-        if player.Character and ESP_SETTINGS.Enabled and not cache[player] then
-            createEsp(player)
-        end
-    end
-end
 return ESP_SETTINGS
