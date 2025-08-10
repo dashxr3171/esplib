@@ -302,34 +302,37 @@ local function updateEsp()
                     end
 
                     -- Skeleton lines (respect WallCheck and shouldShow)
-                    if ESP_SETTINGS.ShowSkeletons and shouldShow then
-                        for _, lineData in ipairs(esp.skeletonlines) do
-                            local borderLine, mainLine, parentBone, childBone = unpack(lineData)
-                            if character:FindFirstChild(parentBone) and character:FindFirstChild(childBone) then
-                                local p1, onScreen1 = camera:WorldToViewportPoint(character[parentBone].Position)
-                                local p2, onScreen2 = camera:WorldToViewportPoint(character[childBone].Position)
-                                if onScreen1 and onScreen2 then
-                                    borderLine.From = Vector2.new(p1.X, p1.Y)
-                                    borderLine.To = Vector2.new(p2.X, p2.Y)
-                                    mainLine.From = Vector2.new(p1.X, p1.Y)
-                                    mainLine.To = Vector2.new(p2.X, p2.Y)
-                                    borderLine.Visible = true
-                                    mainLine.Visible = true
-                                else
-                                    borderLine.Visible = false
-                                    mainLine.Visible = false
-                                end
-                            else
-                                borderLine.Visible = false
-                                mainLine.Visible = false
-                            end
-                        end
-                    else
-                        for _, lineData in ipairs(esp.skeletonlines) do
-                            lineData[1].Visible = false
-                            lineData[2].Visible = false
-                        end
-                    end
+if ESP_SETTINGS.ShowSkeletons and shouldShow then
+    for _, lineData in ipairs(esp.skeletonlines) do
+        local borderLine, mainLine, parentBone, childBone = unpack(lineData)
+        if character:FindFirstChild(parentBone) and character:FindFirstChild(childBone) then
+            local p1, onScreen1 = camera:WorldToViewportPoint(character[parentBone].Position)
+            local p2, onScreen2 = camera:WorldToViewportPoint(character[childBone].Position)
+            if onScreen1 and onScreen2 then
+                borderLine.From = Vector2.new(p1.X, p1.Y)
+                borderLine.To = Vector2.new(p2.X, p2.Y)
+                mainLine.From = Vector2.new(p1.X, p1.Y)
+                mainLine.To = Vector2.new(p2.X, p2.Y)
+                borderLine.Visible = true
+                mainLine.Visible = true
+            else
+                borderLine.Visible = false
+                mainLine.Visible = false
+            end
+        else
+            borderLine.Visible = false
+            mainLine.Visible = false
+        end
+    end
+else
+    -- Hide ALL skeleton lines explicitly when not shown or behind wall
+    for _, lineData in ipairs(esp.skeletonlines) do
+        lineData[1].Visible = false
+        lineData[2].Visible = false
+    end
+end
+
+
 
                     -- Tracer
                     if ESP_SETTINGS.ShowTracer then
