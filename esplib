@@ -28,14 +28,14 @@ local ESP_SETTINGS = {
     CharSize = Vector2.new(4, 6),
     Teamcheck = false,
     WallCheck = false,
-    Enabled = true,         -- Enabled by default for testing
-    ShowBox = true,         -- Show box by default for testing
+    Enabled = false,         -- Enabled by default for testing
+    ShowBox = false,         -- Show box by default for testing
     BoxType = "Box",
-    ShowName = true,
-    ShowHealth = true,
-    ShowDistance = true,
-    ShowSkeletons = true,
-    ShowTracer = true,
+    ShowName = false,
+    ShowHealth = false,
+    ShowDistance = false,
+    ShowSkeletons = false,
+    ShowTracer = false,
     TracerPosition = "Bottom",
 }
 
