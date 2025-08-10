@@ -35,7 +35,8 @@ local ESP_SETTINGS = {
     NameColor = Color3.fromRGB(255, 255, 255),
 
     ShowHealth = false,
-    HealthColor = Color3.fromRGB(0, 255, 0),
+    HealthLowColor = Color3.fromRGB(255, 0, 0),
+    HealthHighColor = Color3.fromRGB(0, 255, 0),
     HealthBorderColor = Color3.fromRGB(0, 0, 0),
 
     ShowDistance = false,
@@ -170,7 +171,7 @@ local function createEsp(player)
             Size = 13,
         }),
         healthBorder = create("Square", {Filled = true, Color = ESP_SETTINGS.HealthBorderColor}),
-        health = create("Square", {Filled = true, Color = ESP_SETTINGS.HealthColor}),
+        health = create("Square", {Filled = true, Color = ESP_SETTINGS.HealthHighColor}),
         distance = create("Text", {
             Outline = true,
             Color = ESP_SETTINGS.DistanceColor,
@@ -232,11 +233,10 @@ local function updateEsp()
                     local boxSize = Vector2.new(math.floor(charHeight * 0.6), math.floor(charHeight))
                     local boxPosition = Vector2.new(math.floor(hrp2D.X - boxSize.X / 2), math.floor(hrp2D.Y - boxSize.Y / 2))
 
-                    -- Update colors every frame for dynamic color pickers
                     esp.tracer.Color = ESP_SETTINGS.TracerColor
                     esp.tracerBorder.Color = ESP_SETTINGS.TracerBorderColor
-                    esp.box.Color = ESP_SETTINGS.BoxColor
-                    esp.boxBorder.Color = ESP_SETTINGS.BoxBorderColor
+                    esp.box.Color = currentColor or ESP_SETTINGS.BoxColor
+                    esp.boxBorder.Color = borderColor or ESP_SETTINGS.BoxBorderColor
 
                     for _, line in ipairs(esp.cornerBoxLines) do
                         line.Color = ESP_SETTINGS.BoxColor
@@ -300,7 +300,7 @@ local function updateEsp()
 
                         esp.health.Position = Vector2.new(barX, barY)
                         esp.health.Size = Vector2.new(HEALTH_BAR_WIDTH, barHeight)
-                        esp.health.Color = ESP_SETTINGS.HealthColor:Lerp(Color3.new(0,1,0), healthPerc)
+                        esp.health.Color = ESP_SETTINGS.HealthLowColor:Lerp(ESP_SETTINGS.HealthHighColor, healthPerc)
                         esp.health.Visible = true
                     else
                         esp.healthBorder.Visible = false
