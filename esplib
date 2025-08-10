@@ -207,8 +207,13 @@ end
 local function updateCornerBoxLines(lines, pos, size)
     if not lines or #lines < 8 then return end
     
-    local lineLengthW = math.max(size.X / 4, 8) -- Minimum length
-    local lineLengthH = math.max(size.Y / 4, 8)
+    -- Static corner line lengths that don't scale with distance
+    local lineLengthW = math.max(size.X / 4, 15) -- Increased minimum width
+    local lineLengthH = math.max(size.Y / 4, 15) -- Increased minimum height
+    
+    -- Cap the maximum length so corners don't get too long on close players
+    lineLengthW = math.min(lineLengthW, size.X / 2)
+    lineLengthH = math.min(lineLengthH, size.Y / 2)
     
     -- Top-left corner
     lines[1].From = pos
