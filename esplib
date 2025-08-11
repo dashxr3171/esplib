@@ -22,73 +22,39 @@ local bones = {
 }
 
 local ESP_SETTINGS = {
-    Enabled = true,
+    Enabled = false,
     Teamcheck = false,
-    TeamCheckESPMode = "Hide", -- "Hide" or "ColorChange"
+    TeamCheckESPMode = "Hide",
     TeamCheckESPColor = Color3.fromRGB(0, 255, 0),
     WallCheck = false,
-    WallCheckMode = "ColorChange", -- "ColorChange" or "Hide"
-    ShowBox = true, -- ENABLED FOR TESTING
-    BoxType = "Corner", -- "Corner" or "Box"
+    WallCheckMode = "ColorChange",
+    ShowBox = false,
+    BoxType = "Box",
     BoxColor = Color3.fromRGB(255, 255, 255),
     BoxBorderColor = Color3.fromRGB(0, 0, 0),
     ShowBoxFilled = false,
     BoxFillColor = Color3.fromRGB(255, 255, 255),
-    BoxFillTransparency = 0.7,
-    ShowName = true, -- ENABLED FOR TESTING
+    ShowName = false,
     NameColor = Color3.fromRGB(255, 255, 255),
     ShowHealth = false,
     HealthLowColor = Color3.fromRGB(255, 0, 0),
     HealthHighColor = Color3.fromRGB(0, 255, 0),
     HealthBorderColor = Color3.fromRGB(0, 0, 0),
-    ShowDistance = true,
+    ShowDistance = false,
     DistanceColor = Color3.fromRGB(255, 255, 255),
     ShowSkeletons = false,
     SkeletonColor = Color3.fromRGB(255, 255, 255),
     SkeletonBorderColor = Color3.fromRGB(0, 0, 0),
     ShowTracer = false,
-    TracerPosition = "Bottom", -- "Top", "Middle", "Bottom"
+    TracerPosition = "Bottom",
     TracerColor = Color3.fromRGB(255, 255, 255),
     TracerBorderColor = Color3.fromRGB(0, 0, 0),
     TracerThickness = 1,
     InvisColor = Color3.fromRGB(255, 0, 0),
-    MaxDistance = 1000, -- Max distance to show ESP
-    CornerLength = 20, -- FIXED: Static corner line length that doesn't change with distance
 }
 
 local HEALTH_BAR_WIDTH = 3
 local displayedHealthPerc = {}
-
--- Optimized teammate checking
-local function areTeammates(player1, player2)
-    if not player1 or not player2 then return false end
-    
-    local team1, team2 = player1.Team, player2.Team
-    
-    -- Quick team object check
-    if team1 and team2 and team1 == team2 then
-        return true
-    end
-    
-    -- Team color check
-    if team1 and team2 and team1.TeamColor == team2.TeamColor then
-        return true
-    end
-    
-    -- Custom attributes check
-    local attr1, attr2 = player1:GetAttribute("Team"), player2:GetAttribute("Team")
-    if attr1 and attr2 and attr1 == attr2 then
-        return true
-    end
-    
-    -- Faction check
-    local faction1, faction2 = player1:GetAttribute("Faction"), player2:GetAttribute("Faction")
-    if faction1 and faction2 and faction1 == faction2 then
-        return true
-    end
-    
-    return false
-end
 
 local function create(class, properties)
     local drawing = Drawing.new(class)
@@ -100,16 +66,14 @@ end
 
 local function safeRemove(obj)
     if not obj then return end
-    
     if type(obj.Remove) == "function" then
         pcall(obj.Remove, obj)
         return
     end
-    
     if type(obj) == "table" then
-        for _, v in pairs(obj) do
+        for _, v in ipairs(obj) do
             if type(v) == "table" then
-                for _, sub in pairs(v) do
+                for _, sub in ipairs(v) do
                     if sub and type(sub.Remove) == "function" then
                         pcall(sub.Remove, sub)
                     end
@@ -124,302 +88,101 @@ end
 local function removeEsp(player)
     local esp = cache[player]
     if not esp then return end
-    
     for _, v in pairs(esp) do
         safeRemove(v)
     end
-    
     cache[player] = nil
     displayedHealthPerc[player] = nil
-end
-
-local function hideAllEsp(esp)
-    -- Hide all elements efficiently
-    local elements = {
-        "tracerBorder", "tracer", "boxBorder", "box", "name", 
-        "healthBorder", "health", "distance", "filledCornerBox"
-    }
-    
-    for _, element in ipairs(elements) do
-        if esp[element] then
-            esp[element].Visible = false
-        end
-    end
-    
-    -- Hide corner box lines
-    if esp.cornerBoxBorderLines then
-        for _, line in ipairs(esp.cornerBoxBorderLines) do
-            line.Visible = false
-        end
-    end
-    
-    if esp.cornerBoxLines then
-        for _, line in ipairs(esp.cornerBoxLines) do
-            line.Visible = false
-        end
-    end
-    
-    -- Hide skeleton lines
-    if esp.skeletonlines then
-        for _, lineData in ipairs(esp.skeletonlines) do
-            lineData[1].Visible = false -- border
-            lineData[2].Visible = false -- main
-        end
-    end
 end
 
 local function isPlayerBehindWall(player)
     local character = player.Character
     if not character then return false end
-    
     local rootPart = character:FindFirstChild("HumanoidRootPart")
     if not rootPart then return false end
-    
-    local localCharacter = localPlayer.Character
-    if not localCharacter then return false end
-    
     local params = RaycastParams.new()
-    params.FilterDescendantsInstances = {localCharacter, character}
+    params.FilterDescendantsInstances = {localPlayer.Character, character}
     params.FilterType = Enum.RaycastFilterType.Blacklist
     params.IgnoreWater = true
-    
     local origin = camera.CFrame.Position
-    local direction = (rootPart.Position - origin)
-    
+    local direction = rootPart.Position - origin
     local result = workspace:Raycast(origin, direction, params)
     return result ~= nil
 end
 
--- FIXED: Create corner box lines with proper Z-Index handling
-local function createCornerBoxLines(color, thickness, zIndex)
+local function createCornerBoxLines(color, thickness)
     local lines = {}
     for i = 1, 8 do
-        lines[i] = create("Line", {
-            Color = color, 
-            Thickness = thickness, 
-            Transparency = 1, 
-            Visible = false,
-            ZIndex = zIndex or 1
-        })
+        lines[i] = create("Line", {Color = color, Thickness = thickness, Transparency = 1})
     end
     return lines
 end
 
--- FIXED: Updated function with consistent corner line lengths
 local function updateCornerBoxLines(lines, pos, size)
-    if not lines or #lines < 8 then return end
-    
-    -- FIXED: Use static corner length from settings instead of scaling with box size
-    local lineLengthW = ESP_SETTINGS.CornerLength
-    local lineLengthH = ESP_SETTINGS.CornerLength
-    
-    -- FIXED: Ensure corner lines never exceed half the box size to prevent connecting
-    lineLengthW = math.min(lineLengthW, size.X / 2 - 2) -- -2 for gap
-    lineLengthH = math.min(lineLengthH, size.Y / 2 - 2) -- -2 for gap
-    
-    -- Ensure minimum length for visibility
-    lineLengthW = math.max(lineLengthW, 8)
-    lineLengthH = math.max(lineLengthH, 8)
-    
-    -- Top-left corner
+    local lineLengthW = size.X / 4
+    local lineLengthH = size.Y / 4
     lines[1].From = pos
     lines[1].To = Vector2.new(pos.X + lineLengthW, pos.Y)
     lines[2].From = pos
     lines[2].To = Vector2.new(pos.X, pos.Y + lineLengthH)
-    
-    -- Top-right corner
     lines[3].From = Vector2.new(pos.X + size.X, pos.Y)
     lines[3].To = Vector2.new(pos.X + size.X - lineLengthW, pos.Y)
     lines[4].From = Vector2.new(pos.X + size.X, pos.Y)
     lines[4].To = Vector2.new(pos.X + size.X, pos.Y + lineLengthH)
-    
-    -- Bottom-left corner
     lines[5].From = Vector2.new(pos.X, pos.Y + size.Y)
     lines[5].To = Vector2.new(pos.X + lineLengthW, pos.Y + size.Y)
     lines[6].From = Vector2.new(pos.X, pos.Y + size.Y)
     lines[6].To = Vector2.new(pos.X, pos.Y + size.Y - lineLengthH)
-    
-    -- Bottom-right corner
     lines[7].From = Vector2.new(pos.X + size.X, pos.Y + size.Y)
     lines[7].To = Vector2.new(pos.X + size.X - lineLengthW, pos.Y + size.Y)
     lines[8].From = Vector2.new(pos.X + size.X, pos.Y + size.Y)
     lines[8].To = Vector2.new(pos.X + size.X, pos.Y + size.Y - lineLengthH)
-    
     for _, line in ipairs(lines) do
         line.Visible = true
     end
 end
 
-local function updateCornerBoxColors(lines, color)
-    if not lines then return end
-    for _, line in ipairs(lines) do
-        if line then
-            line.Color = color
-        end
-    end
-end
-
 local function createEsp(player)
     local esp = {
-        -- FIXED: Border lines have lower Z-Index so they render behind main lines
-        cornerBoxBorderLines = createCornerBoxLines(ESP_SETTINGS.BoxBorderColor, 3, 1),
-        cornerBoxLines = createCornerBoxLines(ESP_SETTINGS.BoxColor, 1, 2),
-        
-        tracerBorder = create("Line", {
-            Thickness = ESP_SETTINGS.TracerThickness + 2, 
-            Color = ESP_SETTINGS.TracerBorderColor, 
-            Visible = false,
-            ZIndex = 1
-        }),
-        tracer = create("Line", {
-            Thickness = ESP_SETTINGS.TracerThickness, 
-            Color = ESP_SETTINGS.TracerColor, 
-            Visible = false,
-            ZIndex = 2
-        }),
-        
-        boxBorder = create("Square", {
-            Thickness = 3, 
-            Color = ESP_SETTINGS.BoxBorderColor, 
-            Filled = false, 
-            Visible = false,
-            ZIndex = 1
-        }),
-        box = create("Square", {
-            Thickness = 1, 
-            Color = ESP_SETTINGS.BoxColor, 
-            Filled = false, 
-            Visible = false,
-            ZIndex = 2
-        }),
-        
+        tracerBorder = create("Line", {Thickness = ESP_SETTINGS.TracerThickness + 2, Color = ESP_SETTINGS.TracerBorderColor}),
+        tracer = create("Line", {Thickness = ESP_SETTINGS.TracerThickness, Color = ESP_SETTINGS.TracerColor}),
+        boxBorder = create("Square", {Thickness = 3, Color = ESP_SETTINGS.BoxBorderColor, Filled = false}),
+        box = create("Square", {Thickness = 1, Color = ESP_SETTINGS.BoxColor, Filled = false}),
+        cornerBoxBorderLines = createCornerBoxLines(ESP_SETTINGS.BoxBorderColor, 3),
+        cornerBoxLines = createCornerBoxLines(ESP_SETTINGS.BoxColor, 1),
         name = create("Text", {
             Outline = true,
             Color = ESP_SETTINGS.NameColor,
             OutlineColor = Color3.new(0, 0, 0),
             Center = true,
-            Size = 11,
-            Font = 2, -- Improved font
-            Visible = false
+            Size = 13,
         }),
-        
-        healthBorder = create("Square", {
-            Filled = true, 
-            Color = ESP_SETTINGS.HealthBorderColor, 
-            Visible = false
-        }),
-        health = create("Square", {
-            Filled = true, 
-            Color = ESP_SETTINGS.HealthHighColor, 
-            Visible = false
-        }),
-        
+        healthBorder = create("Square", {Filled = true, Color = ESP_SETTINGS.HealthBorderColor}),
+        health = create("Square", {Filled = true, Color = ESP_SETTINGS.HealthHighColor}),
         distance = create("Text", {
             Outline = true,
             Color = ESP_SETTINGS.DistanceColor,
             OutlineColor = Color3.new(0, 0, 0),
             Center = true,
-            Size = 10, -- Smaller distance text
-            Font = 2,
-            Visible = false
+            Size = 15,
         }),
-        
         skeletonlines = {},
-        filledCornerBox = nil,
     }
-    
-    -- Create skeleton lines with proper Z-Index
     for _, bonePair in ipairs(bones) do
-        local borderLine = create("Line", {
-            Thickness = 3, 
-            Color = ESP_SETTINGS.SkeletonBorderColor, 
-            Visible = false,
-            ZIndex = 1
-        })
-        local mainLine = create("Line", {
-            Thickness = 1, 
-            Color = ESP_SETTINGS.SkeletonColor, 
-            Visible = false,
-            ZIndex = 2
-        })
+        local borderLine = create("Line", {Thickness = 3, Color = ESP_SETTINGS.SkeletonBorderColor})
+        local mainLine = create("Line", {Thickness = 1, Color = ESP_SETTINGS.SkeletonColor})
         table.insert(esp.skeletonlines, {borderLine, mainLine, bonePair[1], bonePair[2]})
     end
-    
     cache[player] = esp
 end
 
 local function updateEsp()
-    if not ESP_SETTINGS.Enabled then
-        for player, esp in pairs(cache) do
-            hideAllEsp(esp)
-        end
-        return
-    end
-    
     for player, esp in pairs(cache) do
-        if not player or not player.Parent then
-            hideAllEsp(esp)
-            continue
-        end
-        
         local character = player.Character
-        if not character or not character.Parent then
-            hideAllEsp(esp)
-            continue
-        end
-        
-        local rootPart = character:FindFirstChild("HumanoidRootPart")
-        local head = character:FindFirstChild("Head")
-        local humanoid = character:FindFirstChild("Humanoid")
-
-        if not (rootPart and head and humanoid) then
-            hideAllEsp(esp)
-            continue
-        end
-        
-        -- Distance check for optimization
-        local distance = (camera.CFrame.Position - rootPart.Position).Magnitude
-        if distance > ESP_SETTINGS.MaxDistance then
-            hideAllEsp(esp)
-            continue
-        end
-        
-        -- Team check
-        if ESP_SETTINGS.Teamcheck then
-            if areTeammates(localPlayer, player) then
-                if ESP_SETTINGS.TeamCheckESPMode == "Hide" then
-                    hideAllEsp(esp)
-                    continue
-                end
-            end
-        end
-        
-        -- Wall check
+        local playerTeam = player.Team
+        local localTeam = localPlayer.Team
         local isBehindWall = ESP_SETTINGS.WallCheck and isPlayerBehindWall(player)
-        if isBehindWall and ESP_SETTINGS.WallCheckMode == "Hide" then
-            hideAllEsp(esp)
-            continue
-        end
-        
-        local hrp2D, onScreen = camera:WorldToViewportPoint(rootPart.Position)
-        if not onScreen then
-            hideAllEsp(esp)
-            continue
-        end
-        
-        -- Improved box calculations
-        local headPos = camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
-        local legPos = camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0))
-        
-        local boxHeight = math.abs(headPos.Y - legPos.Y)
-        local boxWidth = boxHeight * 0.6
-        local boxSize = Vector2.new(math.floor(boxWidth), math.floor(boxHeight))
-        local boxPosition = Vector2.new(
-            math.floor(hrp2D.X - boxSize.X / 2), 
-            math.floor(headPos.Y)
-        )
-        
-        -- Color determination
+        local shouldShow = false
         local boxMainColor = ESP_SETTINGS.BoxColor
         local boxBorderColor = ESP_SETTINGS.BoxBorderColor
         local skeletonColor = ESP_SETTINGS.SkeletonColor
@@ -428,237 +191,250 @@ local function updateEsp()
         local tracerBorderColor = ESP_SETTINGS.TracerBorderColor
         local nameColor = ESP_SETTINGS.NameColor
         local distanceColor = ESP_SETTINGS.DistanceColor
-        
-        -- Apply team colors
-        if ESP_SETTINGS.Teamcheck and areTeammates(localPlayer, player) and ESP_SETTINGS.TeamCheckESPMode == "ColorChange" then
-            boxMainColor = ESP_SETTINGS.TeamCheckESPColor
-            skeletonColor = ESP_SETTINGS.TeamCheckESPColor
-            tracerColor = ESP_SETTINGS.TeamCheckESPColor
-            nameColor = ESP_SETTINGS.TeamCheckESPColor
-            distanceColor = ESP_SETTINGS.TeamCheckESPColor
-        end
-        
-        -- Apply wall colors
-        if isBehindWall and ESP_SETTINGS.WallCheckMode == "ColorChange" then
-            boxMainColor = ESP_SETTINGS.InvisColor
-            skeletonColor = ESP_SETTINGS.InvisColor
-            tracerColor = ESP_SETTINGS.InvisColor
-            nameColor = ESP_SETTINGS.InvisColor
-            distanceColor = ESP_SETTINGS.InvisColor
-        end
-        
-        -- Update colors
-        esp.tracer.Color = tracerColor
-        esp.tracerBorder.Color = tracerBorderColor
-        esp.name.Color = nameColor
-        esp.distance.Color = distanceColor
-        
-        updateCornerBoxColors(esp.cornerBoxLines, boxMainColor)
-        updateCornerBoxColors(esp.cornerBoxBorderLines, boxBorderColor)
-        
-        for _, lineData in ipairs(esp.skeletonlines) do
-            lineData[2].Color = skeletonColor
-            lineData[1].Color = skeletonBorderColor
-        end
-        
-        -- Show Box
-        if ESP_SETTINGS.ShowBox then
-            if ESP_SETTINGS.BoxType == "Box" then
-                esp.boxBorder.Color = boxBorderColor
-                esp.box.Color = boxMainColor
-                esp.boxBorder.Size = boxSize
-                esp.boxBorder.Position = boxPosition
-                esp.boxBorder.Visible = true
 
-                local fillInset = 2
-                esp.box.Size = Vector2.new(boxSize.X - fillInset * 2, boxSize.Y - fillInset * 2)
-                esp.box.Position = Vector2.new(boxPosition.X + fillInset, boxPosition.Y + fillInset)
-                
-                if ESP_SETTINGS.ShowBoxFilled then
-                    esp.box.Filled = true
-                    esp.box.Transparency = ESP_SETTINGS.BoxFillTransparency
-                    esp.box.Color = ESP_SETTINGS.BoxFillColor
-                else
-                    esp.box.Filled = false
-                    esp.box.Transparency = 1
+        if ESP_SETTINGS.Enabled then
+            if ESP_SETTINGS.Teamcheck and playerTeam and localTeam and playerTeam == localTeam then
+                if ESP_SETTINGS.TeamCheckESPMode == "Hide" then
+                    shouldShow = false
+                elseif ESP_SETTINGS.TeamCheckESPMode == "ColorChange" then
+                    shouldShow = true
+                    boxMainColor = ESP_SETTINGS.TeamCheckESPColor
                 end
-                esp.box.Visible = true
+            else
+                shouldShow = true
+            end
 
-                -- Hide corner lines
-                for _, line in ipairs(esp.cornerBoxBorderLines) do line.Visible = false end
-                for _, line in ipairs(esp.cornerBoxLines) do line.Visible = false end
-                if esp.filledCornerBox then esp.filledCornerBox.Visible = false end
-                
-            elseif ESP_SETTINGS.BoxType == "Corner" then
-                esp.boxBorder.Visible = false
-                esp.box.Visible = false
-
-                -- Show filled box if enabled
-                if ESP_SETTINGS.ShowBoxFilled then
-                    local fillInset = 1
-                    local fillPos = Vector2.new(boxPosition.X + fillInset, boxPosition.Y + fillInset)
-                    local fillSize = Vector2.new(boxSize.X - fillInset * 2, boxSize.Y - fillInset * 2)
-
-                    if not esp.filledCornerBox then
-                        esp.filledCornerBox = create("Square", {
-                            Filled = true, 
-                            Transparency = ESP_SETTINGS.BoxFillTransparency, 
-                            Color = ESP_SETTINGS.BoxFillColor, 
-                            Visible = false,
-                            ZIndex = 0 -- Behind everything
-                        })
-                    end
-                    esp.filledCornerBox.Position = fillPos
-                    esp.filledCornerBox.Size = fillSize
-                    esp.filledCornerBox.Color = ESP_SETTINGS.BoxFillColor
-                    esp.filledCornerBox.Transparency = ESP_SETTINGS.BoxFillTransparency
-                    esp.filledCornerBox.Visible = true
-                else
-                    if esp.filledCornerBox then
-                        esp.filledCornerBox.Visible = false
-                    end
+            if shouldShow and ESP_SETTINGS.WallCheck and isBehindWall then
+                if ESP_SETTINGS.WallCheckMode == "ColorChange" then
+                    boxMainColor = ESP_SETTINGS.InvisColor
+                elseif ESP_SETTINGS.WallCheckMode == "Hide" then
+                    shouldShow = false
                 end
-
-                -- FIXED: Border lines render first (behind main lines)
-                updateCornerBoxLines(esp.cornerBoxBorderLines, boxPosition, boxSize)
-                updateCornerBoxLines(esp.cornerBoxLines, boxPosition, boxSize)
             end
         else
-            esp.boxBorder.Visible = false
-            esp.box.Visible = false
-            for _, line in ipairs(esp.cornerBoxBorderLines) do line.Visible = false end
-            for _, line in ipairs(esp.cornerBoxLines) do line.Visible = false end
-            if esp.filledCornerBox then esp.filledCornerBox.Visible = false end
+            shouldShow = false
         end
 
-        -- Show Name
-        if ESP_SETTINGS.ShowName then
-            local namePos = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y - 16)
-            esp.name.Text = player.Name
-            esp.name.Position = namePos
-            esp.name.Visible = true
-        else
-            esp.name.Visible = false
-        end
+        if character and shouldShow then
+            local rootPart = character:FindFirstChild("HumanoidRootPart")
+            local head = character:FindFirstChild("Head")
+            local humanoid = character:FindFirstChild("Humanoid")
 
-        -- Show Health
-        if ESP_SETTINGS.ShowHealth then
-            local realHealthPerc = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
-            local prevHealth = displayedHealthPerc[player] or realHealthPerc
-            local lerpSpeed = 0.15
-            local newHealth = prevHealth + (realHealthPerc - prevHealth) * lerpSpeed
-            displayedHealthPerc[player] = newHealth
+            if rootPart and head and humanoid then
+                local hrp2D, onScreen = camera:WorldToViewportPoint(rootPart.Position)
+                if onScreen then
+                    local charHeight = math.abs(camera:WorldToViewportPoint(rootPart.Position - Vector3.new(0, 3, 0)).Y - camera:WorldToViewportPoint(rootPart.Position + Vector3.new(0, 2.6, 0)).Y)
+                    local boxSize = Vector2.new(math.floor(charHeight * 0.6), math.floor(charHeight))
+                    local boxPosition = Vector2.new(math.floor(hrp2D.X - boxSize.X / 2), math.floor(hrp2D.Y - boxSize.Y / 2))
 
-            local barHeight = math.floor(boxSize.Y * newHealth)
-            local barX = boxPosition.X - HEALTH_BAR_WIDTH - 3
-            local barY = boxPosition.Y + boxSize.Y - barHeight
+                    esp.box.Color = boxMainColor
+                    esp.boxBorder.Color = boxBorderColor
 
-            esp.healthBorder.Position = Vector2.new(barX - 1, boxPosition.Y - 1)
-            esp.healthBorder.Size = Vector2.new(HEALTH_BAR_WIDTH + 2, boxSize.Y + 2)
-            esp.healthBorder.Visible = true
+                    for _, line in ipairs(esp.cornerBoxLines) do
+                        line.Color = boxMainColor
+                    end
+                    for _, line in ipairs(esp.cornerBoxBorderLines) do
+                        line.Color = boxBorderColor
+                    end
 
-            esp.health.Position = Vector2.new(barX, barY)
-            esp.health.Size = Vector2.new(HEALTH_BAR_WIDTH, barHeight)
-            esp.health.Color = ESP_SETTINGS.HealthLowColor:Lerp(ESP_SETTINGS.HealthHighColor, newHealth)
-            esp.health.Visible = true
-        else
-            esp.healthBorder.Visible = false
-            esp.health.Visible = false
-        end
+                    for _, lineData in ipairs(esp.skeletonlines) do
+                        lineData[2].Color = skeletonColor
+                        lineData[1].Color = skeletonBorderColor
+                    end
 
-        -- Show Distance
-        if ESP_SETTINGS.ShowDistance then
-            local dist = math.floor(distance + 0.5)
-            esp.distance.Text = string.format("%dm", dist)
-            local distPos = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y + boxSize.Y + 4)
-            esp.distance.Position = distPos
-            esp.distance.Visible = true
-        else
-            esp.distance.Visible = false
-        end
+                    esp.tracer.Color = tracerColor
+                    esp.tracerBorder.Color = tracerBorderColor
 
-        -- Show Skeletons
-        if ESP_SETTINGS.ShowSkeletons then
-            for _, lineData in ipairs(esp.skeletonlines) do
-                local borderLine, mainLine, parentBone, childBone = unpack(lineData)
-                local parentPart = character:FindFirstChild(parentBone)
-                local childPart = character:FindFirstChild(childBone)
-                
-                if parentPart and childPart then
-                    local p1, onScreen1 = camera:WorldToViewportPoint(parentPart.Position)
-                    local p2, onScreen2 = camera:WorldToViewportPoint(childPart.Position)
-                    
-                    if onScreen1 and onScreen2 then
-                        local pos1, pos2 = Vector2.new(p1.X, p1.Y), Vector2.new(p2.X, p2.Y)
-                        
-                        -- Border line renders first
-                        borderLine.From = pos1
-                        borderLine.To = pos2
-                        borderLine.Visible = true
-                        
-                        -- Main line renders on top
-                        mainLine.From = pos1
-                        mainLine.To = pos2
-                        mainLine.Visible = true
+                    esp.name.Color = nameColor
+                    esp.distance.Color = distanceColor
+
+                    if ESP_SETTINGS.ShowBox then
+                        if ESP_SETTINGS.BoxType == "Box" then
+                            esp.boxBorder.Size = boxSize
+                            esp.boxBorder.Position = boxPosition
+                            esp.boxBorder.Visible = true
+
+                            esp.box.Size = boxSize
+                            esp.box.Position = boxPosition
+                            if ESP_SETTINGS.ShowBoxFilled then
+                                esp.box.Filled = true
+                                esp.box.Transparency = 0.5
+                                esp.box.Color = ESP_SETTINGS.BoxFillColor
+                            else
+                                esp.box.Filled = false
+                                esp.box.Transparency = 1
+                                esp.box.Color = boxMainColor
+                            end
+                            esp.box.Visible = true
+
+                            for _, line in ipairs(esp.cornerBoxBorderLines) do line.Visible = false end
+                            for _, line in ipairs(esp.cornerBoxLines) do line.Visible = false end
+                        elseif ESP_SETTINGS.BoxType == "Corner" then
+                            esp.boxBorder.Visible = false
+                            esp.box.Visible = false
+                            updateCornerBoxLines(esp.cornerBoxBorderLines, boxPosition, boxSize)
+                            updateCornerBoxLines(esp.cornerBoxLines, boxPosition, boxSize)
+                        else
+                            esp.boxBorder.Visible = false
+                            esp.box.Visible = false
+                            for _, line in ipairs(esp.cornerBoxBorderLines) do line.Visible = false end
+                            for _, line in ipairs(esp.cornerBoxLines) do line.Visible = false end
+                        end
                     else
-                        borderLine.Visible = false
-                        mainLine.Visible = false
+                        esp.boxBorder.Visible = false
+                        esp.box.Visible = false
+                        for _, line in ipairs(esp.cornerBoxBorderLines) do line.Visible = false end
+                        for _, line in ipairs(esp.cornerBoxLines) do line.Visible = false end
+                    end
+
+                    if ESP_SETTINGS.ShowName then
+                        local pos = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y - 16)
+                        esp.name.Text = player.Name
+                        esp.name.Position = pos
+                        esp.name.Visible = true
+                    else
+                        esp.name.Visible = false
+                    end
+
+                    if ESP_SETTINGS.ShowHealth then
+                        local realHealthPerc = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1)
+                        local prevHealth = displayedHealthPerc[player] or 1
+                        local lerpSpeed = 0.1
+                        local newHealth = prevHealth + (realHealthPerc - prevHealth) * lerpSpeed
+                        displayedHealthPerc[player] = newHealth
+
+                        local barHeight = boxSize.Y * newHealth
+                        local barX = boxPosition.X - HEALTH_BAR_WIDTH - 2
+                        local barY = boxPosition.Y + boxSize.Y - barHeight
+
+                        esp.healthBorder.Position = Vector2.new(barX - 1, boxPosition.Y)
+                        esp.healthBorder.Size = Vector2.new(HEALTH_BAR_WIDTH + 2, boxSize.Y)
+                        esp.healthBorder.Visible = true
+                        esp.healthBorder.Color = ESP_SETTINGS.HealthBorderColor
+
+                        esp.health.Position = Vector2.new(barX, barY)
+                        esp.health.Size = Vector2.new(HEALTH_BAR_WIDTH, barHeight)
+                        esp.health.Color = ESP_SETTINGS.HealthLowColor:Lerp(ESP_SETTINGS.HealthHighColor, newHealth)
+                        esp.health.Visible = true
+                    else
+                        esp.healthBorder.Visible = false
+                        esp.health.Visible = false
+                    end
+
+                    if ESP_SETTINGS.ShowDistance then
+                        local dist = math.floor((camera.CFrame.Position - rootPart.Position).Magnitude + 0.5)
+                        esp.distance.Text = string.format("[%d]", dist)
+                        local distPos = Vector2.new(boxPosition.X + boxSize.X / 2, boxPosition.Y + boxSize.Y + 2)
+                        esp.distance.Position = distPos
+                        esp.distance.Visible = true
+                    else
+                        esp.distance.Visible = false
+                    end
+
+                    if ESP_SETTINGS.ShowSkeletons then
+                        for _, lineData in ipairs(esp.skeletonlines) do
+                            local borderLine, mainLine, parentBone, childBone = unpack(lineData)
+                            if character:FindFirstChild(parentBone) and character:FindFirstChild(childBone) then
+                                local p1, onScreen1 = camera:WorldToViewportPoint(character[parentBone].Position)
+                                local p2, onScreen2 = camera:WorldToViewportPoint(character[childBone].Position)
+                                if onScreen1 and onScreen2 then
+                                    borderLine.From = Vector2.new(p1.X, p1.Y)
+                                    borderLine.To = Vector2.new(p2.X, p2.Y)
+                                    mainLine.From = Vector2.new(p1.X, p1.Y)
+                                    mainLine.To = Vector2.new(p2.X, p2.Y)
+                                    borderLine.Visible = true
+                                    mainLine.Visible = true
+                                else
+                                    borderLine.Visible = false
+                                    mainLine.Visible = false
+                                end
+                            else
+                                borderLine.Visible = false
+                                mainLine.Visible = false
+                            end
+                        end
+                    else
+                        for _, lineData in ipairs(esp.skeletonlines) do
+                            lineData[1].Visible = false
+                            lineData[2].Visible = false
+                        end
+                    end
+
+                    if ESP_SETTINGS.ShowTracer then
+                        local tracerY = (ESP_SETTINGS.TracerPosition == "Top" and 0) or (ESP_SETTINGS.TracerPosition == "Middle" and camera.ViewportSize.Y / 2) or camera.ViewportSize.Y
+                        esp.tracerBorder.From = Vector2.new(camera.ViewportSize.X / 2, tracerY)
+                        esp.tracer.From = Vector2.new(camera.ViewportSize.X / 2, tracerY)
+                        esp.tracerBorder.To = Vector2.new(hrp2D.X, hrp2D.Y)
+                        esp.tracer.To = Vector2.new(hrp2D.X, hrp2D.Y)
+                        esp.tracerBorder.Visible = true
+                        esp.tracer.Visible = true
+                    else
+                        esp.tracerBorder.Visible = false
+                        esp.tracer.Visible = false
                     end
                 else
-                    borderLine.Visible = false
-                    mainLine.Visible = false
+                    for _, v in pairs(esp) do
+                        if type(v) == "table" then
+                            for _, obj in ipairs(v) do
+                                if obj.Visible ~= nil then
+                                    obj.Visible = false
+                                end
+                            end
+                        elseif v.Visible ~= nil then
+                            v.Visible = false
+                        end
+                    end
+                    for _, lineData in ipairs(esp.skeletonlines) do
+                        lineData[1].Visible = false
+                        lineData[2].Visible = false
+                    end
+                end
+            else
+                for _, v in pairs(esp) do
+                    if type(v) == "table" then
+                        for _, obj in ipairs(v) do
+                            if obj.Visible ~= nil then
+                                obj.Visible = false
+                            end
+                        end
+                    elseif v.Visible ~= nil then
+                        v.Visible = false
+                    end
+                end
+                for _, lineData in ipairs(esp.skeletonlines) do
+                    lineData[1].Visible = false
+                    lineData[2].Visible = false
                 end
             end
         else
+            for _, v in pairs(esp) do
+                if type(v) == "table" then
+                    for _, obj in ipairs(v) do
+                        if obj.Visible ~= nil then
+                            obj.Visible = false
+                        end
+                    end
+                elseif v.Visible ~= nil then
+                    v.Visible = false
+                end
+            end
             for _, lineData in ipairs(esp.skeletonlines) do
                 lineData[1].Visible = false
                 lineData[2].Visible = false
             end
         end
-
-        -- Show Tracer
-        if ESP_SETTINGS.ShowTracer then
-            local tracerY = (ESP_SETTINGS.TracerPosition == "Top" and 0) or 
-                          (ESP_SETTINGS.TracerPosition == "Middle" and camera.ViewportSize.Y / 2) or 
-                          camera.ViewportSize.Y
-            
-            local fromPos = Vector2.new(camera.ViewportSize.X / 2, tracerY)
-            local toPos = Vector2.new(hrp2D.X, hrp2D.Y)
-            
-            -- Border renders first
-            esp.tracerBorder.From = fromPos
-            esp.tracerBorder.To = toPos
-            esp.tracerBorder.Visible = true
-            
-            -- Main tracer on top
-            esp.tracer.From = fromPos
-            esp.tracer.To = toPos
-            esp.tracer.Visible = true
-        else
-            esp.tracerBorder.Visible = false
-            esp.tracer.Visible = false
-        end
     end
 end
 
--- Event handlers
 local function onPlayerAdded(player)
     player.CharacterAdded:Connect(function()
-        task.wait(1)
-        if not cache[player] then
+        wait(1)
+        if cache[player] == nil then
             createEsp(player)
         end
     end)
-    
-    if player.Character then
-        task.wait(1)
-        if not cache[player] then
-            createEsp(player)
-        end
-    end
 end
 
--- Initialize ESP for existing players
 for _, player in pairs(Players:GetPlayers()) do
     if player ~= localPlayer then
         createEsp(player)
@@ -666,7 +442,6 @@ for _, player in pairs(Players:GetPlayers()) do
     end
 end
 
--- Handle new players
 Players.PlayerAdded:Connect(function(player)
     if player ~= localPlayer then
         createEsp(player)
@@ -674,14 +449,10 @@ Players.PlayerAdded:Connect(function(player)
     end
 end)
 
--- Clean up when players leave
 Players.PlayerRemoving:Connect(function(player)
     removeEsp(player)
 end)
 
--- Main update loop
 RunService.RenderStepped:Connect(function()
     updateEsp()
 end)
-
-return ESP_SETTINGS
