@@ -2,14 +2,22 @@ local ESP = {}
 ESP.Settings = {
     Tracers = false,
     Boxes = false,
-    BoxMainColor = Color3.fromRGB(255, 255, 255),
-    BoxBorderColor = Color3.fromRGB(0, 0, 0),
     ShowPlayers = false,
     ShowMobs = false,
     TeamCheck = false,
     NameESP = false,
     HealthESP = false,
     DistanceESP = false,
+
+    -- Individual main colors
+    BoxMainColor = Color3.fromRGB(255, 255, 255),
+    TracerColor = Color3.fromRGB(0, 255, 0),
+    NameColor = Color3.fromRGB(255, 255, 255),
+    HealthColor = {High = Color3.fromRGB(0,255,0), Mid = Color3.fromRGB(255,255,0), Low = Color3.fromRGB(255,0,0)},
+    DistanceColor = Color3.fromRGB(255,255,0),
+
+    -- Shared outline/background color
+    BackgroundColor = Color3.fromRGB(0,0,0),
 }
 
 local RunService = game:GetService("RunService")
@@ -17,46 +25,49 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
+-- Reusable drawing tables
+local Tracers, Boxes, Texts, HealthBars = {}, {}, {}, {}
+
+-- Check if target is enemy
 local function IsEnemy(playerOrModel)
     if not ESP.Settings.TeamCheck then return true end
     local localTeam = LocalPlayer:GetAttribute("Team")
     if not localTeam then return true end
-    local targetTeam = nil
+    local targetTeam
     if typeof(playerOrModel) == "Instance" then
         targetTeam = playerOrModel:GetAttribute("Team")
         if not targetTeam and playerOrModel:IsA("Model") then
             local player = Players:GetPlayerFromCharacter(playerOrModel)
-            if player then
-                targetTeam = player:GetAttribute("Team")
-            end
+            if player then targetTeam = player:GetAttribute("Team") end
         end
     end
     if not targetTeam then return true end
     return localTeam ~= targetTeam
 end
 
+-- Draw tracer
 local function DrawTracer(from, to)
     local outline = Drawing.new("Line")
     outline.From = from
     outline.To = to
-    outline.Color = Color3.new(0,0,0)
+    outline.Color = ESP.Settings.BackgroundColor
     outline.Thickness = 3
     outline.Visible = true
 
     local line = Drawing.new("Line")
     line.From = from
     line.To = to
-    line.Color = ESP.Settings.BoxMainColor
+    line.Color = ESP.Settings.TracerColor
     line.Thickness = 1
     line.Visible = true
 
     return {outline = outline, line = line}
 end
 
+-- Draw box
 local function DrawBoundingBox(model)
     local parts = {}
-    local candidates = {"HumanoidRootPart","Head","LeftFoot","RightFoot","LeftHand","RightHand"}
-    for _, name in pairs(candidates) do
+    for _, name in pairs({"HumanoidRootPart","Head","LeftFoot","RightFoot","LeftHand","RightHand"}) do
         local part = model:FindFirstChild(name)
         if part then table.insert(parts, part) end
     end
@@ -83,7 +94,7 @@ local function DrawBoundingBox(model)
         maxX, maxY = screenPos.X + 5, screenPos.Y + 10
     end
 
-    local paddingX, paddingY = 4, 6 -- reduce height slightly
+    local paddingX, paddingY = 4, 6
     minX = minX - paddingX
     minY = minY - paddingY
     maxX = maxX + paddingX
@@ -94,7 +105,7 @@ local function DrawBoundingBox(model)
 
     local border = Drawing.new("Square")
     border.Visible = true
-    border.Color = ESP.Settings.BoxBorderColor
+    border.Color = ESP.Settings.BackgroundColor
     border.Thickness = 3
     border.Filled = false
     border.Position = pos
@@ -111,11 +122,12 @@ local function DrawBoundingBox(model)
     return {border = border, main = main, pos = pos, size = size}
 end
 
+-- Draw text
 local function DrawText(text, position, color)
     local outline = Drawing.new("Text")
     outline.Text = text
     outline.Position = position + Vector2.new(1,1)
-    outline.Color = Color3.new(0,0,0)
+    outline.Color = ESP.Settings.BackgroundColor
     outline.Size = 14
     outline.Center = true
     outline.Visible = true
@@ -131,32 +143,27 @@ local function DrawText(text, position, color)
     return {outline = outline, main = main}
 end
 
+-- Draw health bar
 local function DrawHealthBar(model, box)
     local hum = model:FindFirstChildOfClass("Humanoid")
     if not hum then return nil end
     local healthPercent = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
 
-    local barWidth = 4 -- thinner
-    local barHeight = box.size.Y -- same height as box
-    local barPos = box.pos - Vector2.new(barWidth + 2, 0) -- left side of box
+    local barWidth = 4
+    local barHeight = box.size.Y
+    local barPos = box.pos - Vector2.new(barWidth + 2, 0)
 
     local border = Drawing.new("Square")
     border.Position = barPos
     border.Size = Vector2.new(barWidth, barHeight)
-    border.Color = Color3.new(0,0,0)
+    border.Color = ESP.Settings.BackgroundColor
     border.Thickness = 1
     border.Filled = false
     border.Visible = true
 
-    -- Color gradient green -> yellow -> red
-    local barColor
-    if healthPercent > 0.5 then
-        barColor = Color3.fromRGB(0,255,0)
-    elseif healthPercent > 0.25 then
-        barColor = Color3.fromRGB(255,255,0)
-    else
-        barColor = Color3.fromRGB(255,0,0)
-    end
+    local barColor = healthPercent > 0.5 and ESP.Settings.HealthColor.High
+                     or healthPercent > 0.25 and ESP.Settings.HealthColor.Mid
+                     or ESP.Settings.HealthColor.Low
 
     local main = Drawing.new("Square")
     main.Position = barPos + Vector2.new(0, barHeight*(1-healthPercent))
@@ -168,19 +175,13 @@ local function DrawHealthBar(model, box)
     return {border = border, main = main}
 end
 
-local Tracers = {}
-local Boxes = {}
-local Texts = {}
-local HealthBars = {}
-
+-- Check if model should have ESP
 local function checkModel(model)
     if not model:FindFirstChild("Humanoid") or model == LocalPlayer.Character then return nil end
     local targetPart = model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart")
     if targetPart and IsEnemy(model) then
-        local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
-        if onScreen then
-            return targetPart
-        end
+        local _, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+        if onScreen then return targetPart end
     end
     return nil
 end
@@ -193,91 +194,54 @@ local function ShouldESP(model)
     return checkModel(model) ~= nil
 end
 
+-- Main render loop
 RunService.RenderStepped:Connect(function()
-    for _, line in pairs(Tracers) do
-        line.line.Visible = false
-        line.outline.Visible = false
-    end
-    for _, box in pairs(Boxes) do
-        box.border.Visible = false
-        box.main.Visible = false
-    end
-    for _, text in pairs(Texts) do
-        text.main.Visible = false
-        text.outline.Visible = false
-    end
-    for _, bar in pairs(HealthBars) do
-        bar.main.Visible = false
-        bar.border.Visible = false
+    -- Hide previous drawings
+    for _, t in pairs(Tracers) do t.line.Visible = false t.outline.Visible = false end
+    for _, b in pairs(Boxes) do b.main.Visible = false b.border.Visible = false end
+    for _, t in pairs(Texts) do t.main.Visible = false t.outline.Visible = false end
+    for _, h in pairs(HealthBars) do h.main.Visible = false h.border.Visible = false end
+
+    -- Clear tables
+    Tracers, Boxes, Texts, HealthBars = {}, {}, {}, {}
+
+    local allModels = workspace:GetChildren()
+    if workspace:FindFirstChild("Mobs") then
+        for _, mob in pairs(workspace.Mobs:GetChildren()) do table.insert(allModels, mob) end
     end
 
-    Tracers = {}
-    Boxes = {}
-    Texts = {}
-    HealthBars = {}
-
-    for _, model in pairs(workspace:GetChildren()) do
+    for _, model in pairs(allModels) do
         if ShouldESP(model) then
             local target = checkModel(model)
             if target then
                 local screenPos, onScreen = Camera:WorldToViewportPoint(target.Position)
                 if onScreen then
+                    -- Tracers
                     if ESP.Settings.Tracers then
                         table.insert(Tracers, DrawTracer(Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y), Vector2.new(screenPos.X, screenPos.Y)))
                     end
-                    if ESP.Settings.Boxes then
-                        local box = DrawBoundingBox(model)
-                        if box then
-                            table.insert(Boxes, box)
-                            if ESP.Settings.NameESP then
-                                local nameText = DrawText(model.Name, box.pos - Vector2.new(0, 16), Color3.fromRGB(255,255,255))
-                                table.insert(Texts, nameText)
-                            end
-                            if ESP.Settings.HealthESP then
-                                local bar = DrawHealthBar(model, box)
-                                table.insert(HealthBars, bar)
-                            end
-                            if ESP.Settings.DistanceESP then
-                                local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - target.Position).Magnitude)
-                                local distText = DrawText("["..dist.."]", box.pos + Vector2.new(box.size.X/2, box.size.Y + 2), Color3.fromRGB(255,255,0))
-                                table.insert(Texts, distText)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
 
-    if workspace:FindFirstChild("Mobs") then
-        for _, mob in pairs(workspace.Mobs:GetChildren()) do
-            if ShouldESP(mob) then
-                local target = checkModel(mob)
-                if target then
-                    local screenPos, onScreen = Camera:WorldToViewportPoint(target.Position)
-                    if onScreen then
-                        if ESP.Settings.Tracers then
-                            table.insert(Tracers, DrawTracer(Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y), Vector2.new(screenPos.X, screenPos.Y)))
-                        end
-                        if ESP.Settings.Boxes then
-                            local box = DrawBoundingBox(mob)
-                            if box then
-                                table.insert(Boxes, box)
-                                if ESP.Settings.NameESP then
-                                    local nameText = DrawText(mob.Name, box.pos - Vector2.new(0, 16), Color3.fromRGB(255,255,255))
-                                    table.insert(Texts, nameText)
-                                end
-                                if ESP.Settings.HealthESP then
-                                    local bar = DrawHealthBar(mob, box)
-                                    table.insert(HealthBars, bar)
-                                end
-                                if ESP.Settings.DistanceESP then
-                                    local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - target.Position).Magnitude)
-                                    local distText = DrawText("["..dist.."]", box.pos + Vector2.new(box.size.X/2, box.size.Y + 2), Color3.fromRGB(255,255,0))
-                                    table.insert(Texts, distText)
-                                end
-                            end
-                        end
+                    -- Boxes
+                    local box
+                    if ESP.Settings.Boxes then
+                        box = DrawBoundingBox(model)
+                        if box then table.insert(Boxes, box) end
+                    end
+
+                    -- Name
+                    if ESP.Settings.NameESP and box then
+                        table.insert(Texts, DrawText(model.Name, box.pos - Vector2.new(0,16), ESP.Settings.NameColor))
+                    end
+
+                    -- Health
+                    if ESP.Settings.HealthESP and box then
+                        table.insert(HealthBars, DrawHealthBar(model, box))
+                    end
+
+                    -- Distance
+                    if ESP.Settings.DistanceESP and box then
+                        local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - target.Position).Magnitude)
+                        table.insert(Texts, DrawText("["..dist.."]", box.pos + Vector2.new(box.size.X/2, box.size.Y+2), ESP.Settings.DistanceColor))
                     end
                 end
             end
