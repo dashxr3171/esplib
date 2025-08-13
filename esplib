@@ -3,7 +3,7 @@ local ESP = {}
 ESP.Settings = {
     Enabled = true,
     ShowBox = false,
-    BoxType = "Corner", -- Box or Corner
+    BoxType = "Corner", -- "Box" or "Corner"
     BoxColor = Color3.fromRGB(255,255,255),
     BoxBorderColor = Color3.fromRGB(0,0,0),
     ShowSkeletons = false,
@@ -113,24 +113,79 @@ function ESP:UpdateESP()
             for _,v in pairs(esp) do if v.Visible then v.Visible=false end end
             continue
         end
+
         -- Tracer
         if self.Settings.ShowTracer then
             local fromPos = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y)
             esp.tracer.From = fromPos; esp.tracer.To=Vector2.new(screenPos.X,screenPos.Y); esp.tracer.Visible=true
             esp.tracerBorder.From=fromPos; esp.tracerBorder.To=Vector2.new(screenPos.X,screenPos.Y); esp.tracerBorder.Visible=true
         else esp.tracer.Visible=false; esp.tracerBorder.Visible=false end
+
         -- Name
         if self.Settings.ShowName then
             esp.name.Text = entity.Name
             esp.name.Position = Vector2.new(screenPos.X, screenPos.Y-16)
             esp.name.Visible = true
         else esp.name.Visible=false end
+
+        -- Corner Box
+        if self.Settings.ShowBox and self.Settings.BoxType == "Corner" then
+            local rootPos = hrp.Position
+            local size = Vector3.new(2,3,1) -- adjust size for corner box
+            local corners = {
+                Vector3.new(-size.X/2, size.Y/2, 0),
+                Vector3.new(size.X/2, size.Y/2, 0),
+                Vector3.new(size.X/2, -size.Y/2, 0),
+                Vector3.new(-size.X/2, -size.Y/2, 0)
+            }
+            local screenPoints = {}
+            for _, corner in ipairs(corners) do
+                local worldPos = rootPos + corner
+                local sp, visible = camera:WorldToViewportPoint(worldPos)
+                table.insert(screenPoints, Vector2.new(sp.X, sp.Y))
+            end
+            -- Draw 4 corner lines
+            for i=1,4 do
+                local nexti = i%4 +1
+                -- border
+                esp.cornerBoxBorderLines[i].From = screenPoints[i]
+                esp.cornerBoxBorderLines[i].To = Vector2.new(
+                    screenPoints[i].X + (i==1 or i==4 and -10 or 10),
+                    screenPoints[i].Y
+                )
+                esp.cornerBoxBorderLines[i].Visible = true
+                esp.cornerBoxBorderLines[i+4].From = screenPoints[i]
+                esp.cornerBoxBorderLines[i+4].To = Vector2.new(
+                    screenPoints[i].X,
+                    screenPoints[i].Y + (i==1 or i==2 and 10 or -10)
+                )
+                esp.cornerBoxBorderLines[i+4].Visible = true
+
+                -- main lines
+                esp.cornerBoxLines[i].From = esp.cornerBoxBorderLines[i].From
+                esp.cornerBoxLines[i].To = esp.cornerBoxBorderLines[i].To
+                esp.cornerBoxLines[i].Visible = true
+                esp.cornerBoxLines[i+4].From = esp.cornerBoxBorderLines[i+4].From
+                esp.cornerBoxLines[i+4].To = esp.cornerBoxBorderLines[i+4].To
+                esp.cornerBoxLines[i+4].Visible = true
+            end
+        else
+            for i=1,8 do
+                esp.cornerBoxBorderLines[i].Visible=false
+                esp.cornerBoxLines[i].Visible=false
+            end
+        end
     end
 end
 
 -- Scan workspace and create ESP
 function ESP:ScanWorkspace()
     local entities = {}
+    for _,player in ipairs(Players:GetPlayers()) do
+        if player.Character and player.Character.Parent then
+            entities[player.Character] = true
+        end
+    end
     for _,obj in ipairs(workspace:GetChildren()) do
         if obj:IsA("Model") and obj:FindFirstChildWhichIsA("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
             entities[obj]=true
@@ -156,4 +211,4 @@ RunService.RenderStepped:Connect(function()
     ESP:UpdateESP()
 end)
 
-return ESP
+return ESP.Settings
