@@ -8,245 +8,685 @@ ESP.Settings = {
     NameESP = false,
     HealthESP = false,
     DistanceESP = false,
+    MaxDistance = 500,
 
     -- Individual main colors
     BoxMainColor = Color3.fromRGB(255, 255, 255),
-    TracerColor = Color3.fromRGB(0, 255, 0),
+    TracerColor = Color3.fromRGB(255, 255, 255),
     NameColor = Color3.fromRGB(255, 255, 255),
     HealthColor = {High = Color3.fromRGB(0,255,0), Mid = Color3.fromRGB(255,255,0), Low = Color3.fromRGB(255,0,0)},
-    DistanceColor = Color3.fromRGB(255,255,0),
-
-    -- Shared outline/background color
+    DistanceColor = Color3.fromRGB(255, 255, 255),
     BackgroundColor = Color3.fromRGB(0,0,0),
 }
 
+-- Services
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- Reusable drawing tables
-local Tracers, Boxes, Texts, HealthBars = {}, {}, {}, {}
+-- Safety check for Drawing library
+if not Drawing then
+    warn("Drawing library not available - ESP cannot function")
+    return ESP
+end
 
--- Check if target is enemy
-local function IsEnemy(playerOrModel)
-    if not ESP.Settings.TeamCheck then return true end
-    local localTeam = LocalPlayer:GetAttribute("Team")
-    if not localTeam then return true end
-    local targetTeam
-    if typeof(playerOrModel) == "Instance" then
-        targetTeam = playerOrModel:GetAttribute("Team")
-        if not targetTeam and playerOrModel:IsA("Model") then
-            local player = Players:GetPlayerFromCharacter(playerOrModel)
-            if player then targetTeam = player:GetAttribute("Team") end
+-- Object pools for reusing Drawing objects
+local DrawingCache = {
+    tracerOutlines = {},
+    tracerLines = {},
+    boxBorders = {},
+    boxMains = {},
+    textOutlines = {},
+    textMains = {},
+    healthBorders = {},
+    healthMains = {},
+    healthBackgrounds = {}
+}
+
+-- Active objects tracking
+local ActiveObjects = {
+    tracers = {},
+    boxes = {},
+    texts = {},
+    healthBars = {}
+}
+
+-- Performance caches
+local TeamCache = {}
+local ModelCache = {}
+local LastCacheClean = 0
+
+-- Safe tick function
+local function safeTick()
+    return tick() or os.clock() or 0
+end
+
+-- Fast team check with caching
+local function IsEnemy(model)
+    if not ESP.Settings.TeamCheck then 
+        return true 
+    end
+    
+    local success, result = pcall(function()
+        local modelId = tostring(model)
+        local cached = TeamCache[modelId]
+        local currentTime = safeTick()
+        
+        if cached and currentTime - cached.time < 2 then
+            return cached.result
         end
-    end
-    if not targetTeam then return true end
-    return localTeam ~= targetTeam
-end
-
--- Draw tracer
-local function DrawTracer(from, to)
-    local outline = Drawing.new("Line")
-    outline.From = from
-    outline.To = to
-    outline.Color = ESP.Settings.BackgroundColor
-    outline.Thickness = 3
-    outline.Visible = true
-
-    local line = Drawing.new("Line")
-    line.From = from
-    line.To = to
-    line.Color = ESP.Settings.TracerColor
-    line.Thickness = 1
-    line.Visible = true
-
-    return {outline = outline, line = line}
-end
-
--- Draw box
-local function DrawBoundingBox(model)
-    local parts = {}
-    for _, name in pairs({"HumanoidRootPart","Head","LeftFoot","RightFoot","LeftHand","RightHand"}) do
-        local part = model:FindFirstChild(name)
-        if part then table.insert(parts, part) end
-    end
-    if #parts == 0 then return nil end
-
-    local minX, minY = math.huge, math.huge
-    local maxX, maxY = -math.huge, -math.huge
-    local anyVisible = false
-
-    for _, part in pairs(parts) do
-        local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
-        if onScreen then
-            anyVisible = true
-            minX = math.min(minX, screenPos.X)
-            minY = math.min(minY, screenPos.Y)
-            maxX = math.max(maxX, screenPos.X)
-            maxY = math.max(maxY, screenPos.Y)
+        
+        -- Get local player's team from multiple sources
+        local localTeam = nil
+        
+        -- Try LocalPlayer first
+        if LocalPlayer and LocalPlayer:GetAttribute("Team") then
+            localTeam = LocalPlayer:GetAttribute("Team")
         end
+        
+        -- Try LocalPlayer.Team if exists
+        if not localTeam and LocalPlayer and LocalPlayer.Team then
+            localTeam = LocalPlayer.Team.Name
+        end
+        
+        -- Try finding LocalPlayer's character in workspace
+        if not localTeam and LocalPlayer and LocalPlayer.Character then
+            local char = LocalPlayer.Character
+            if char:GetAttribute("Team") then
+                localTeam = char:GetAttribute("Team")
+            end
+        end
+        
+        -- Alternative: find player model in workspace by name
+        if not localTeam and LocalPlayer then
+            local playerModel = workspace:FindFirstChild(LocalPlayer.Name)
+            if playerModel and playerModel:GetAttribute("Team") then
+                localTeam = playerModel:GetAttribute("Team")
+            end
+        end
+        
+        -- Get target's team
+        local targetTeam = nil
+        local player = Players:GetPlayerFromCharacter(model)
+        
+        if player then
+            -- For players: check multiple sources
+            if player:GetAttribute("Team") then
+                targetTeam = player:GetAttribute("Team")
+            elseif player.Team then
+                targetTeam = player.Team.Name
+            elseif model:GetAttribute("Team") then
+                targetTeam = model:GetAttribute("Team")
+            end
+        else
+            -- For NPCs/mobs: check model attributes
+            if model:GetAttribute("Team") then
+                targetTeam = model:GetAttribute("Team")
+            end
+        end
+        
+        -- Debug print (uncomment to see what teams are detected)
+        -- print("Local team:", localTeam, "Target team:", targetTeam, "Model:", model.Name)
+        
+        -- If local player has no team, consider everyone an enemy
+        if not localTeam then
+            TeamCache[modelId] = {result = true, time = currentTime}
+            return true
+        end
+        
+        -- If target has no team, consider them an enemy
+        if not targetTeam then
+            TeamCache[modelId] = {result = true, time = currentTime}
+            return true
+        end
+        
+        -- Convert to strings for comparison
+        local localTeamStr = tostring(localTeam)
+        local targetTeamStr = tostring(targetTeam)
+        
+        local isEnemy = localTeamStr ~= targetTeamStr
+        TeamCache[modelId] = {result = isEnemy, time = currentTime}
+        return isEnemy
+    end)
+    
+    if success then
+        return result
+    else
+        return true
     end
+end
 
-    if not anyVisible then
-        local screenPos, _ = Camera:WorldToViewportPoint(parts[1].Position)
-        minX, minY = screenPos.X - 5, screenPos.Y - 5
-        maxX, maxY = screenPos.X + 5, screenPos.Y + 10
+-- Get or create drawing object with error handling
+local function GetDrawing(cache, drawingType)
+    local success, obj = pcall(function()
+        if #cache > 0 then
+            return table.remove(cache, #cache)
+        end
+        return Drawing.new(drawingType)
+    end)
+    
+    if success then
+        return obj
+    else
+        return nil
     end
-
-    local paddingX, paddingY = 4, 6
-    minX = minX - paddingX
-    minY = minY - paddingY
-    maxX = maxX + paddingX
-    maxY = maxY + paddingY
-
-    local size = Vector2.new(maxX - minX, maxY - minY)
-    local pos = Vector2.new(minX, minY)
-
-    local border = Drawing.new("Square")
-    border.Visible = true
-    border.Color = ESP.Settings.BackgroundColor
-    border.Thickness = 3
-    border.Filled = false
-    border.Position = pos
-    border.Size = size
-
-    local main = Drawing.new("Square")
-    main.Visible = true
-    main.Color = ESP.Settings.BoxMainColor
-    main.Thickness = 1
-    main.Filled = false
-    main.Position = pos
-    main.Size = size
-
-    return {border = border, main = main, pos = pos, size = size}
 end
 
--- Draw text
-local function DrawText(text, position, color)
-    local outline = Drawing.new("Text")
-    outline.Text = text
-    outline.Position = position + Vector2.new(1,1)
-    outline.Color = ESP.Settings.BackgroundColor
-    outline.Size = 14
-    outline.Center = true
-    outline.Visible = true
-
-    local main = Drawing.new("Text")
-    main.Text = text
-    main.Position = position
-    main.Color = color
-    main.Size = 14
-    main.Center = true
-    main.Visible = true
-
-    return {outline = outline, main = main}
-end
-
--- Draw health bar
-local function DrawHealthBar(model, box)
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    if not hum then return nil end
-    local healthPercent = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
-
-    local barWidth = 4
-    local barHeight = box.size.Y
-    local barPos = box.pos - Vector2.new(barWidth + 2, 0)
-
-    local border = Drawing.new("Square")
-    border.Position = barPos
-    border.Size = Vector2.new(barWidth, barHeight)
-    border.Color = ESP.Settings.BackgroundColor
-    border.Thickness = 1
-    border.Filled = false
-    border.Visible = true
-
-    local barColor = healthPercent > 0.5 and ESP.Settings.HealthColor.High
-                     or healthPercent > 0.25 and ESP.Settings.HealthColor.Mid
-                     or ESP.Settings.HealthColor.Low
-
-    local main = Drawing.new("Square")
-    main.Position = barPos + Vector2.new(0, barHeight*(1-healthPercent))
-    main.Size = Vector2.new(barWidth, barHeight * healthPercent)
-    main.Color = barColor
-    main.Filled = true
-    main.Visible = true
-
-    return {border = border, main = main}
-end
-
--- Check if model should have ESP
-local function checkModel(model)
-    if not model:FindFirstChild("Humanoid") or model == LocalPlayer.Character then return nil end
-    local targetPart = model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart")
-    if targetPart and IsEnemy(model) then
-        local _, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
-        if onScreen then return targetPart end
+-- Return drawing object to cache
+local function ReturnDrawing(cache, obj)
+    if obj then
+        pcall(function()
+            obj.Visible = false
+            cache[#cache + 1] = obj
+        end)
     end
-    return nil
 end
 
+-- Safe distance calculation
+local function GetDistance(part1, part2)
+    if not part1 or not part2 then 
+        return math.huge 
+    end
+    
+    local success, distance = pcall(function()
+        return (part1.Position - part2.Position).Magnitude
+    end)
+    
+    if success then
+        return distance
+    else
+        return math.huge
+    end
+end
+
+-- Fast model validation with safety checks
+local function IsValidModel(model)
+    if not model or model == LocalPlayer.Character then 
+        return false 
+    end
+    if model.Name == "BotRig" then 
+        return false 
+    end
+    
+    local success, valid, targetPart, distance = pcall(function()
+        local modelId = tostring(model)
+        local cached = ModelCache[modelId]
+        local currentTime = safeTick()
+        
+        if cached and currentTime - cached.time < 1 then
+            return cached.valid, cached.targetPart, cached.distance
+        end
+        
+        local humanoid = model:FindFirstChildOfClass("Humanoid")
+        if not humanoid then
+            ModelCache[modelId] = {valid = false, time = currentTime}
+            return false
+        end
+        
+        local targetPart = model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart")
+        if not targetPart then
+            ModelCache[modelId] = {valid = false, time = currentTime}
+            return false
+        end
+        
+        -- Distance check
+        local distance = math.huge
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            distance = GetDistance(LocalPlayer.Character.HumanoidRootPart, targetPart)
+        end
+        
+        local isValid = distance <= ESP.Settings.MaxDistance and IsEnemy(model)
+        ModelCache[modelId] = {valid = isValid, targetPart = targetPart, distance = distance, time = currentTime}
+        return isValid, targetPart, distance
+    end)
+    
+    if success then
+        return valid, targetPart, distance
+    else
+        return false
+    end
+end
+
+-- Should show ESP for this model
 local function ShouldESP(model)
-    if model.Name == "BotRig" then return false end
-    local player = Players:GetPlayerFromCharacter(model)
-    if player and not ESP.Settings.ShowPlayers then return false end
-    if not player and not ESP.Settings.ShowMobs then return false end
-    return checkModel(model) ~= nil
+    if not model then 
+        return false 
+    end
+    
+    local success, shouldShow = pcall(function()
+        local player = Players:GetPlayerFromCharacter(model)
+        if player and not ESP.Settings.ShowPlayers then 
+            return false 
+        end
+        if not player and not ESP.Settings.ShowMobs then 
+            return false 
+        end
+        return true
+    end)
+    
+    if success then
+        return shouldShow
+    else
+        return false
+    end
 end
 
--- Main render loop
-RunService.RenderStepped:Connect(function()
-    -- Hide previous drawings
-    for _, t in pairs(Tracers) do t.line.Visible = false t.outline.Visible = false end
-    for _, b in pairs(Boxes) do b.main.Visible = false b.border.Visible = false end
-    for _, t in pairs(Texts) do t.main.Visible = false t.outline.Visible = false end
-    for _, h in pairs(HealthBars) do h.main.Visible = false h.border.Visible = false end
-
-    -- Clear tables
-    Tracers, Boxes, Texts, HealthBars = {}, {}, {}, {}
-
-    local allModels = workspace:GetChildren()
-    if workspace:FindFirstChild("Mobs") then
-        for _, mob in pairs(workspace.Mobs:GetChildren()) do table.insert(allModels, mob) end
+-- Create tracer with error handling
+local function CreateTracer(from, to)
+    local outline = GetDrawing(DrawingCache.tracerOutlines, "Line")
+    local line = GetDrawing(DrawingCache.tracerLines, "Line")
+    
+    if not outline or not line then 
+        return nil 
     end
+    
+    pcall(function()
+        outline.From = from
+        outline.To = to
+        outline.Color = ESP.Settings.BackgroundColor
+        outline.Thickness = 3
+        outline.Visible = true
 
-    for _, model in pairs(allModels) do
-        if ShouldESP(model) then
-            local target = checkModel(model)
-            if target then
-                local screenPos, onScreen = Camera:WorldToViewportPoint(target.Position)
+        line.From = from
+        line.To = to
+        line.Color = ESP.Settings.TracerColor
+        line.Thickness = 1
+        line.Visible = true
+    end)
+
+    return {outline, line}
+end
+
+-- Create bounding box with safety checks
+local function CreateBoundingBox(model)
+    if not model then 
+        return nil 
+    end
+    
+    local success, box = pcall(function()
+        local rootPart = model:FindFirstChild("HumanoidRootPart")
+        local head = model:FindFirstChild("Head")
+        
+        if not rootPart and not head then 
+            return nil 
+        end
+        
+        local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
+        local anyVisible = false
+        
+        -- Check more parts for better box sizing
+        local partsToCheck = {
+            model:FindFirstChild("Head"),
+            model:FindFirstChild("HumanoidRootPart"),
+            model:FindFirstChild("UpperTorso") or model:FindFirstChild("Torso"),
+            model:FindFirstChild("LeftFoot"),
+            model:FindFirstChild("RightFoot"),
+            model:FindFirstChild("LeftHand"),
+            model:FindFirstChild("RightHand"),
+            model:FindFirstChild("LeftUpperArm"),
+            model:FindFirstChild("RightUpperArm"),
+            model:FindFirstChild("LeftUpperLeg"),
+            model:FindFirstChild("RightUpperLeg")
+        }
+        
+        for _, part in pairs(partsToCheck) do
+            if part then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
                 if onScreen then
-                    -- Tracers
-                    if ESP.Settings.Tracers then
-                        table.insert(Tracers, DrawTracer(Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y), Vector2.new(screenPos.X, screenPos.Y)))
-                    end
-
-                    -- Boxes
-                    local box
-                    if ESP.Settings.Boxes then
-                        box = DrawBoundingBox(model)
-                        if box then table.insert(Boxes, box) end
-                    end
-
-                    -- Name
-                    if ESP.Settings.NameESP and box then
-                        table.insert(Texts, DrawText(model.Name, box.pos - Vector2.new(0,16), ESP.Settings.NameColor))
-                    end
-
-                    -- Health
-                    if ESP.Settings.HealthESP and box then
-                        table.insert(HealthBars, DrawHealthBar(model, box))
-                    end
-
-                    -- Distance
-                    if ESP.Settings.DistanceESP and box then
-                        local dist = math.floor((LocalPlayer.Character.HumanoidRootPart.Position - target.Position).Magnitude)
-                        table.insert(Texts, DrawText("["..dist.."]", box.pos + Vector2.new(box.size.X/2, box.size.Y+2), ESP.Settings.DistanceColor))
-                    end
+                    anyVisible = true
+                    minX = math.min(minX, screenPos.X)
+                    minY = math.min(minY, screenPos.Y)
+                    maxX = math.max(maxX, screenPos.X)
+                    maxY = math.max(maxY, screenPos.Y)
                 end
             end
         end
+        
+        -- If no parts are visible, create a reasonable size based on distance
+        if not anyVisible then
+            local part = rootPart or head
+            if not part then 
+                return nil 
+            end
+            
+            local screenPos = Camera:WorldToViewportPoint(part.Position)
+            local distance = GetDistance(Camera.CFrame.Position, part.Position)
+            local scale = math.max(1, 100 / distance)
+            minX, minY = screenPos.X - scale * 12, screenPos.Y - scale * 18
+            maxX, maxY = screenPos.X + scale * 12, screenPos.Y + scale * 18
+        end
+        
+        -- More generous padding for wider boxes
+        local width = maxX - minX
+        local height = maxY - minY
+        local paddingX = math.max(8, width * 0.15)
+        local paddingY = math.max(10, height * 0.1)
+        minX, minY = minX - paddingX, minY - paddingY
+        maxX, maxY = maxX + paddingX, maxY + paddingY
+        
+        local size = Vector2.new(maxX - minX, maxY - minY)
+        local pos = Vector2.new(minX, minY)
+        
+        local border = GetDrawing(DrawingCache.boxBorders, "Square")
+        local main = GetDrawing(DrawingCache.boxMains, "Square")
+        
+        if not border or not main then 
+            return nil 
+        end
+        
+        border.Position = pos
+        border.Size = size
+        border.Color = ESP.Settings.BackgroundColor
+        border.Thickness = 3
+        border.Filled = false
+        border.Visible = true
+
+        main.Position = pos
+        main.Size = size
+        main.Color = ESP.Settings.BoxMainColor
+        main.Thickness = 1
+        main.Filled = false
+        main.Visible = true
+
+        return {border, main, pos = pos, size = size}
+    end)
+    
+    if success then
+        return box
+    else
+        return nil
     end
-end)
+end
+
+-- Create text with error handling
+local function CreateText(text, position, color)
+    local outline = GetDrawing(DrawingCache.textOutlines, "Text")
+    local main = GetDrawing(DrawingCache.textMains, "Text")
+    
+    if not outline or not main then 
+        return nil 
+    end
+    
+    pcall(function()
+        outline.Text = tostring(text)
+        outline.Position = position + Vector2.new(1,1)
+        outline.Color = ESP.Settings.BackgroundColor
+        outline.Size = 14
+        outline.Center = true
+        outline.Visible = true
+
+        main.Text = tostring(text)
+        main.Position = position
+        main.Color = color
+        main.Size = 14
+        main.Center = true
+        main.Visible = true
+    end)
+
+    return {outline, main}
+end
+
+-- Create health bar with comprehensive safety checks
+local function CreateHealthBar(model, box)
+    if not model or not box then 
+        return nil 
+    end
+    
+    local success, healthBar = pcall(function()
+        local humanoid = model:FindFirstChildOfClass("Humanoid")
+        if not humanoid then 
+            return nil 
+        end
+        
+        -- Safe health calculation with multiple fallbacks
+        local health = 100
+        local maxHealth = 100
+        local healthPercent = 1
+        
+        -- Try to get actual health values
+        if humanoid.Health and humanoid.MaxHealth then
+            health = tonumber(humanoid.Health) or 100
+            maxHealth = tonumber(humanoid.MaxHealth) or 100
+            
+            -- Prevent division by zero and ensure valid range
+            if maxHealth <= 0 then 
+                maxHealth = 100 
+            end
+            healthPercent = math.clamp(health / maxHealth, 0, 1)
+            
+            -- Check for invalid values
+            if health ~= health or healthPercent ~= healthPercent then
+                healthPercent = 1
+            end
+        end
+        
+        local barWidth = 2
+        local barHeight = box.size.Y
+        local barPos = box.pos - Vector2.new(barWidth + 3, 0)
+
+        -- Create drawing objects
+        local outerBorder = GetDrawing(DrawingCache.healthBorders, "Square")
+        local background = GetDrawing(DrawingCache.healthBackgrounds, "Square")
+        local healthBarObj = GetDrawing(DrawingCache.healthMains, "Square")
+        
+        if not outerBorder or not background or not healthBarObj then 
+            return nil 
+        end
+
+        -- Black outer border
+        outerBorder.Position = barPos
+        outerBorder.Size = Vector2.new(barWidth, barHeight)
+        outerBorder.Color = Color3.fromRGB(0, 0, 0)
+        outerBorder.Thickness = 1
+        outerBorder.Filled = false
+        outerBorder.Visible = true
+
+        -- Dark background
+        background.Position = barPos
+        background.Size = Vector2.new(barWidth, barHeight)
+        background.Color = Color3.fromRGB(20, 20, 20)
+        background.Filled = true
+        background.Visible = true
+
+        -- Main health bar
+        local healthBarHeight = math.max(1, barHeight * healthPercent)
+        healthBarObj.Position = barPos + Vector2.new(0, barHeight - healthBarHeight)
+        healthBarObj.Size = Vector2.new(barWidth, healthBarHeight)
+        
+        -- Color based on health percentage
+        local r, g, b
+        if healthPercent > 0.6 then
+            -- Green to yellow transition
+            r = math.floor(255 * (1 - healthPercent) * 2.5)
+            g = 255
+            b = 0
+        elseif healthPercent > 0.3 then
+            -- Yellow zone  
+            r = 255
+            g = 255
+            b = 0
+        else
+            -- Red zone
+            r = 255
+            g = math.floor(255 * healthPercent * 3.33)
+            b = 0
+        end
+        
+        healthBarObj.Color = Color3.fromRGB(r, g, b)
+        healthBarObj.Filled = true
+        healthBarObj.Visible = true
+
+        return {outerBorder, background, healthBarObj}
+    end)
+    
+    if success then
+        return healthBar
+    else
+        return nil
+    end
+end
+
+-- Clean up all active objects safely
+local function CleanupObjects()
+    pcall(function()
+        -- Return all objects to cache
+        for _, tracer in pairs(ActiveObjects.tracers) do
+            if tracer[1] then ReturnDrawing(DrawingCache.tracerOutlines, tracer[1]) end
+            if tracer[2] then ReturnDrawing(DrawingCache.tracerLines, tracer[2]) end
+        end
+        
+        for _, box in pairs(ActiveObjects.boxes) do
+            if box[1] then ReturnDrawing(DrawingCache.boxBorders, box[1]) end
+            if box[2] then ReturnDrawing(DrawingCache.boxMains, box[2]) end
+        end
+        
+        for _, text in pairs(ActiveObjects.texts) do
+            if text[1] then ReturnDrawing(DrawingCache.textOutlines, text[1]) end
+            if text[2] then ReturnDrawing(DrawingCache.textMains, text[2]) end
+        end
+        
+        for _, health in pairs(ActiveObjects.healthBars) do
+            if health[1] then ReturnDrawing(DrawingCache.healthBorders, health[1]) end
+            if health[2] then ReturnDrawing(DrawingCache.healthBackgrounds, health[2]) end
+            if health[3] then ReturnDrawing(DrawingCache.healthMains, health[3]) end
+        end
+        
+        -- Clear active tables
+        ActiveObjects.tracers = {}
+        ActiveObjects.boxes = {}
+        ActiveObjects.texts = {}
+        ActiveObjects.healthBars = {}
+    end)
+end
+
+-- Safe connection variable
+local ESPConnection
+
+-- Main render loop with comprehensive error handling
+local function StartESP()
+    if ESPConnection then
+        ESPConnection:Disconnect()
+    end
+    
+    ESPConnection = RunService.RenderStepped:Connect(function()
+        pcall(function()
+            -- Clean cache periodically
+            local currentTime = safeTick()
+            if currentTime - LastCacheClean > 10 then
+                TeamCache = {}
+                ModelCache = {}
+                LastCacheClean = currentTime
+            end
+            
+            -- Clean up previous frame objects
+            CleanupObjects()
+            
+            -- Safety checks
+            if not Camera or not LocalPlayer then 
+                return 
+            end
+            
+            -- Get all models efficiently
+            local allModels = {}
+            
+            -- Add workspace models
+            pcall(function()
+                for _, child in pairs(workspace:GetChildren()) do
+                    if child:IsA("Model") then
+                        allModels[#allModels + 1] = child
+                    end
+                end
+            end)
+            
+            -- Add mobs
+            pcall(function()
+                local mobsFolder = workspace:FindFirstChild("Mobs")
+                if mobsFolder then
+                    for _, mob in pairs(mobsFolder:GetChildren()) do
+                        if mob:IsA("Model") then
+                            allModels[#allModels + 1] = mob
+                        end
+                    end
+                end
+            end)
+
+            -- Process models
+            for i = 1, #allModels do
+                local model = allModels[i]
+                pcall(function()
+                    if ShouldESP(model) then
+                        local isValid, targetPart, distance = IsValidModel(model)
+                        if isValid and targetPart then
+                            local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+                            if onScreen then
+                                -- Tracers
+                                if ESP.Settings.Tracers then
+                                    local tracer = CreateTracer(
+                                        Vector2.new(Camera.ViewportSize.X * 0.5, Camera.ViewportSize.Y),
+                                        Vector2.new(screenPos.X, screenPos.Y)
+                                    )
+                                    if tracer then
+                                        ActiveObjects.tracers[#ActiveObjects.tracers + 1] = tracer
+                                    end
+                                end
+
+                                -- Boxes
+                                local box
+                                if ESP.Settings.Boxes then
+                                    box = CreateBoundingBox(model)
+                                    if box then
+                                        ActiveObjects.boxes[#ActiveObjects.boxes + 1] = box
+                                    end
+                                end
+
+                                -- Name ESP
+                                if ESP.Settings.NameESP and box then
+                                    local nameText = CreateText(model.Name, box.pos - Vector2.new(0, 16), ESP.Settings.NameColor)
+                                    if nameText then
+                                        ActiveObjects.texts[#ActiveObjects.texts + 1] = nameText
+                                    end
+                                end
+
+                                -- Health ESP
+                                if ESP.Settings.HealthESP and box then
+                                    local healthBar = CreateHealthBar(model, box)
+                                    if healthBar then
+                                        ActiveObjects.healthBars[#ActiveObjects.healthBars + 1] = healthBar
+                                    end
+                                end
+
+                                -- Distance ESP
+                                if ESP.Settings.DistanceESP and box and distance then
+                                    local dist = math.floor(distance)
+                                    local distanceText = CreateText(
+                                        "[" .. dist .. "]",
+                                        box.pos + Vector2.new(box.size.X * 0.5, box.size.Y + 2),
+                                        ESP.Settings.DistanceColor
+                                    )
+                                    if distanceText then
+                                        ActiveObjects.texts[#ActiveObjects.texts + 1] = distanceText
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+        end)
+    end)
+end
+
+-- Add cleanup function
+function ESP:Destroy()
+    if ESPConnection then
+        ESPConnection:Disconnect()
+        ESPConnection = nil
+    end
+    CleanupObjects()
+end
+
+-- Start the ESP
+StartESP()
 
 return ESP
